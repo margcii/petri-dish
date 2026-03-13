@@ -1,269 +1,265 @@
-"""数据库操作模块"""
+"""
+Petri Dish 数据库操作类
+使用 aiosqlite 实现异步数据库操作
+"""
 
-import asyncio
 import aiosqlite
-from typing import Optional, List, Dict, Any
+import uuid
 from datetime import datetime
-import json
-import os
-
-# 数据库文件路径
-DB_PATH = os.path.join(os.path.dirname(__file__), "petri.db")
+from typing import Optional, List, Dict, Any
 
 
 class Database:
-    """SQLite数据库异步操作类"""
-
-    def __init__(self, db_path: str = None):
-        self.db_path = db_path or DB_PATH
-
-    async def init(self):
-        """初始化数据库，创建表"""
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT UNIQUE NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            await db.execute("""
-                CREATE TABLE IF NOT EXISTS dishes (
-                    dish_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    name TEXT NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(user_id)
-                )
-            """)
-            await db.execute("""
-                CREATE TABLE IF NOT EXISTS fungi (
-                    fungus_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    text TEXT NOT NULL,
-                    image_id TEXT NOT NULL,
-                    creator_id INTEGER NOT NULL,
-                    parent_ids JSON,
-                    status TEXT DEFAULT 'idle',
-                    location TEXT DEFAULT 'air',
-                    unlock_time DATETIME,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (creator_id) REFERENCES users(user_id)
-                )
-            """)
-            await db.commit()
-
-    # ========== 用户操作 ==========
-
-    async def create_user(self, name: str) -> Optional[int]:
+    """异步数据库操作类"""
+    
+    def __init__(self, db_path: str = "petri_dish.db"):
+        self.db_path = db_path
+        self._db: Optional[aiosqlite.Connection] = None
+    
+    async def connect(self):
+        """建立数据库连接"""
+        if self._db is None:
+            self._db = await aiosqlite.connect(self.db_path)
+            # 启用外键约束
+            await self._db.execute("PRAGMA foreign_keys = ON")
+            # 初始化表结构
+            await self._init_tables()
+    
+    async def close(self):
+        """关闭数据库连接"""
+        if self._db:
+            await self._db.close()
+            self._db = None
+    
+    async def _init_tables(self):
+        """初始化数据库表"""
+        with open("schema.sql", "r", encoding="utf-8") as f:
+            schema = f.read()
+        await self._db.executescript(schema)
+        await self._db.commit()
+    
+    # ==================== 用户操作 ====================
+    
+    async def create_user(self, name: str) -> str:
         """创建用户，返回 user_id"""
-        async with aiosqlite.connect(self.db_path) as db:
-            try:
-                cursor = await db.execute(
-                    "INSERT INTO users (name) VALUES (?)",
-                    (name,)
-                )
-                await db.commit()
-                return cursor.lastrowid
-            except aiosqlite.IntegrityError:
-                # 用户已存在
-                cursor = await db.execute(
-                    "SELECT user_id FROM users WHERE name = ?",
-                    (name,)
-                )
-                result = await cursor.fetchone()
-                return result[0] if result else None
-
-    async def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
-        """根据 ID 获取用户"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                "SELECT * FROM users WHERE user_id = ?",
-                (user_id,)
-            )
+        user_id = str(uuid.uuid4())
+        await self._db.execute(
+            "INSERT INTO users (user_id, name) VALUES (?, ?)",
+            (user_id, name)
+        )
+        await self._db.commit()
+        return user_id
+    
+    async def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """获取用户信息"""
+        async with self._db.execute(
+            "SELECT user_id, name, created_at FROM users WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
             row = await cursor.fetchone()
-            return dict(row) if row else None
-
-    async def get_user_by_name(self, name: str) -> Optional[Dict[str, Any]]:
-        """根据名称获取用户"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                "SELECT * FROM users WHERE name = ?",
-                (name,)
-            )
-            row = await cursor.fetchone()
-            return dict(row) if row else None
-
-    # ========== 培养皿操作 ==========
-
-    async def create_dish(self, user_id: int, name: str) -> Optional[int]:
+            if row:
+                return {
+                    "user_id": row[0],
+                    "name": row[1],
+                    "created_at": row[2]
+                }
+            return None
+    
+    # ==================== 培养皿操作 ====================
+    
+    async def create_dish(self, user_id: str, name: str) -> str:
         """创建培养皿，返回 dish_id"""
-        async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute(
-                "INSERT INTO dishes (user_id, name) VALUES (?, ?)",
-                (user_id, name)
-            )
-            await db.commit()
-            return cursor.lastrowid
-
-    async def get_dish(self, dish_id: int) -> Optional[Dict[str, Any]]:
-        """根据 ID 获取培养皿"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                "SELECT * FROM dishes WHERE dish_id = ?",
-                (dish_id,)
-            )
+        dish_id = str(uuid.uuid4())
+        await self._db.execute(
+            "INSERT INTO dishes (dish_id, user_id, name) VALUES (?, ?, ?)",
+            (dish_id, user_id, name)
+        )
+        await self._db.commit()
+        return dish_id
+    
+    async def get_dish(self, dish_id: str) -> Optional[Dict[str, Any]]:
+        """获取培养皿信息"""
+        async with self._db.execute(
+            "SELECT dish_id, user_id, name, created_at FROM dishes WHERE dish_id = ?",
+            (dish_id,)
+        ) as cursor:
             row = await cursor.fetchone()
-            return dict(row) if row else None
-
-    async def get_dishes_by_user(self, user_id: int) -> List[Dict[str, Any]]:
+            if row:
+                return {
+                    "dish_id": row[0],
+                    "user_id": row[1],
+                    "name": row[2],
+                    "created_at": row[3]
+                }
+            return None
+    
+    async def get_user_dishes(self, user_id: str) -> List[Dict[str, Any]]:
         """获取用户的所有培养皿"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                "SELECT * FROM dishes WHERE user_id = ? ORDER BY created_at DESC",
-                (user_id,)
-            )
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
-
-    # ========== 真菌操作 ==========
-
+        dishes = []
+        async with self._db.execute(
+            "SELECT dish_id, user_id, name, created_at FROM dishes WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            async for row in cursor:
+                dishes.append({
+                    "dish_id": row[0],
+                    "user_id": row[1],
+                    "name": row[2],
+                    "created_at": row[3]
+                })
+        return dishes
+    
+    # ==================== 真菌操作 ====================
+    
     async def create_fungus(
-        self,
-        text: str,
+        self, 
+        user_id: str, 
+        content: str, 
         image_id: str,
-        creator_id: int,
-        parent_ids: List[int] = None,
+        dish_id: Optional[str] = None,
         status: str = "idle",
         location: str = "air"
-    ) -> int:
+    ) -> str:
         """创建真菌，返回 fungus_id"""
-        async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute(
-                """INSERT INTO fungi 
-                   (text, image_id, creator_id, parent_ids, status, location, unlock_time)
-                   VALUES (?, ?, ?, ?, ?, ?, NULL)""",
-                (text, image_id, creator_id, json.dumps(parent_ids) if parent_ids else None, status, location)
-            )
-            await db.commit()
-            return cursor.lastrowid
-
-    async def get_fungus(self, fungus_id: int) -> Optional[Dict[str, Any]]:
-        """根据 ID 获取真菌"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                "SELECT * FROM fungi WHERE fungus_id = ?",
-                (fungus_id,)
-            )
+        fungus_id = str(uuid.uuid4())
+        await self._db.execute(
+            """INSERT INTO fungi 
+               (fungus_id, dish_id, user_id, content, image_id, status, location) 
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (fungus_id, dish_id, user_id, content, image_id, status, location)
+        )
+        await self._db.commit()
+        return fungus_id
+    
+    async def get_fungus(self, fungus_id: str) -> Optional[Dict[str, Any]]:
+        """获取真菌信息"""
+        async with self._db.execute(
+            """SELECT fungus_id, dish_id, user_id, content, image_id, status, 
+                      location, unlock_time, parent1_id, parent2_id, created_at 
+               FROM fungi WHERE fungus_id = ?""",
+            (fungus_id,)
+        ) as cursor:
             row = await cursor.fetchone()
-            result = dict(row) if row else None
-            if result and result.get("parent_ids"):
-                result["parent_ids"] = json.loads(result["parent_ids"])
-            return result
-
-    async def get_fungi_by_dish(self, dish_id: int) -> List[Dict[str, Any]]:
-        """获取培养皿中的真菌（status='idle'）"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                """SELECT * FROM fungi 
-                   WHERE location = ? AND status = 'idle' 
-                   ORDER BY created_at DESC""",
-                (str(dish_id),)
-            )
-            rows = await cursor.fetchall()
-            result = []
-            for row in rows:
-                d = dict(row)
-                if d.get("parent_ids"):
-                    d["parent_ids"] = json.loads(d["parent_ids"])
-                result.append(d)
-            return result
-
-    async def get_all_air_fungi(self) -> List[Dict[str, Any]]:
-        """获取空气中所有真菌"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                """SELECT * FROM fungi 
-                   WHERE location = 'air' AND status = 'idle' 
-                   ORDER BY created_at DESC"""
-            )
-            rows = await cursor.fetchall()
-            result = []
-            for row in rows:
-                d = dict(row)
-                if d.get("parent_ids"):
-                    d["parent_ids"] = json.loads(d["parent_ids"])
-                result.append(d)
-            return result
-
-    async def update_fungus_location(self, fungus_id: int, location: str) -> bool:
-        """更新真菌位置"""
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "UPDATE fungi SET location = ? WHERE fungus_id = ?",
-                (location, fungus_id)
-            )
-            await db.commit()
-            return True
-
-    async def update_fungus_status(self, fungus_id: int, status: str, unlock_time: datetime = None) -> bool:
+            if row:
+                return {
+                    "fungus_id": row[0],
+                    "dish_id": row[1],
+                    "user_id": row[2],
+                    "content": row[3],
+                    "image_id": row[4],
+                    "status": row[5],
+                    "location": row[6],
+                    "unlock_time": row[7],
+                    "parent1_id": row[8],
+                    "parent2_id": row[9],
+                    "created_at": row[10]
+                }
+            return None
+    
+    async def get_dish_fungi(self, dish_id: str) -> List[Dict[str, Any]]:
+        """获取培养皿中的所有真菌"""
+        fungi = []
+        async with self._db.execute(
+            """SELECT fungus_id, dish_id, user_id, content, image_id, status, 
+                      location, unlock_time, parent1_id, parent2_id, created_at 
+               FROM fungi WHERE dish_id = ?""",
+            (dish_id,)
+        ) as cursor:
+            async for row in cursor:
+                fungi.append({
+                    "fungus_id": row[0],
+                    "dish_id": row[1],
+                    "user_id": row[2],
+                    "content": row[3],
+                    "image_id": row[4],
+                    "status": row[5],
+                    "location": row[6],
+                    "unlock_time": row[7],
+                    "parent1_id": row[8],
+                    "parent2_id": row[9],
+                    "created_at": row[10]
+                })
+        return fungi
+    
+    async def get_air_fungi(self) -> List[Dict[str, Any]]:
+        """获取空气中的所有真菌"""
+        fungi = []
+        async with self._db.execute(
+            """SELECT fungus_id, dish_id, user_id, content, image_id, status, 
+                      location, unlock_time, parent1_id, parent2_id, created_at 
+               FROM fungi WHERE location = 'air'"""
+        ) as cursor:
+            async for row in cursor:
+                fungi.append({
+                    "fungus_id": row[0],
+                    "dish_id": row[1],
+                    "user_id": row[2],
+                    "content": row[3],
+                    "image_id": row[4],
+                    "status": row[5],
+                    "location": row[6],
+                    "unlock_time": row[7],
+                    "parent1_id": row[8],
+                    "parent2_id": row[9],
+                    "created_at": row[10]
+                })
+        return fungi
+    
+    async def update_fungus_status(
+        self, 
+        fungus_id: str, 
+        status: str,
+        location: Optional[str] = None,
+        dish_id: Optional[str] = None,
+        unlock_time: Optional[str] = None
+    ):
         """更新真菌状态"""
-        async with aiosqlite.connect(self.db_path) as db:
-            if unlock_time:
-                await db.execute(
-                    "UPDATE fungi SET status = ?, unlock_time = ? WHERE fungus_id = ?",
-                    (status, unlock_time, fungus_id)
-                )
-            else:
-                await db.execute(
-                    "UPDATE fungi SET status = ? WHERE fungus_id = ?",
-                    (status, fungus_id)
-                )
-            await db.commit()
-            return True
-
-    async def get_incubating_fungi(self) -> List[Dict[str, Any]]:
-        """获取正在孵化的真菌"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            now = datetime.utcnow()
-            cursor = await db.execute(
-                "SELECT * FROM fungi WHERE status = 'incubating' AND unlock_time <= ?",
-                (now,)
-            )
-            rows = await cursor.fetchall()
-            result = []
-            for row in rows:
-                d = dict(row)
-                if d.get("parent_ids"):
-                    d["parent_ids"] = json.loads(d["parent_ids"])
-                result.append(d)
-            return result
-
-    async def get_idle_fungi_in_dish(self, dish_id: int, count: int = 2) -> List[Dict[str, Any]]:
-        """获取培养皿中处于 idle 状态的真菌"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                """SELECT * FROM fungi 
-                   WHERE location = ? AND status = 'idle' 
-                   ORDER BY RANDOM() LIMIT ?""",
-                (str(dish_id), count)
-            )
-            rows = await cursor.fetchall()
-            result = []
-            for row in rows:
-                d = dict(row)
-                if d.get("parent_ids"):
-                    d["parent_ids"] = json.loads(d["parent_ids"])
-                result.append(d)
-            return result
+        updates = ["status = ?"]
+        params = [status]
+        
+        if location is not None:
+            updates.append("location = ?")
+            params.append(location)
+        
+        if dish_id is not None:
+            updates.append("dish_id = ?")
+            params.append(dish_id)
+        
+        if unlock_time is not None:
+            updates.append("unlock_time = ?")
+            params.append(unlock_time)
+        
+        params.append(fungus_id)
+        
+        await self._db.execute(
+            f"UPDATE fungi SET {', '.join(updates)} WHERE fungus_id = ?",
+            params
+        )
+        await self._db.commit()
+    
+    async def create_hybrid_fungus(
+        self,
+        user_id: str,
+        content: str,
+        image_id: str,
+        parent1_id: str,
+        parent2_id: str,
+        dish_id: Optional[str] = None
+    ) -> str:
+        """创建杂交真菌"""
+        fungus_id = str(uuid.uuid4())
+        unlock_time = datetime.now().isoformat()
+        
+        await self._db.execute(
+            """INSERT INTO fungi 
+               (fungus_id, dish_id, user_id, content, image_id, status, location, 
+                unlock_time, parent1_id, parent2_id) 
+               VALUES (?, ?, ?, ?, ?, 'incubating', 'air', ?, ?, ?)""",
+            (fungus_id, dish_id, user_id, content, image_id, unlock_time, 
+             parent1_id, parent2_id)
+        )
+        await self._db.commit()
+        return fungus_id
 
 
 # 全局数据库实例

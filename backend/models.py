@@ -1,69 +1,88 @@
-"""数据模型定义"""
+"""
+Petri Dish 数据模型
+使用 Pydantic 定义请求/响应模型
+"""
 
+from pydantic import BaseModel
+from typing import Optional, List
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
 
 
-class User(Base):
-    """用户模型"""
-    __tablename__ = "users"
+# ==================== 请求模型 ====================
 
-    user_id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            "user_id": self.user_id,
-            "name": self.name,
-            "created_at": self.created_at.isoformat() if self.created_at else None
-        }
+class RegisterRequest(BaseModel):
+    """用户注册请求"""
+    name: str
 
 
-class Dish(Base):
-    """培养皿模型"""
-    __tablename__ = "dishes"
-
-    dish_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"))
-    name = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            "dish_id": self.dish_id,
-            "user_id": self.user_id,
-            "name": self.name,
-            "created_at": self.created_at.isoformat() if self.created_at else None
-        }
+class CreateDishRequest(BaseModel):
+    """创建培养皿请求"""
+    user_id: str
+    name: str
 
 
-class Fungus(Base):
-    """真菌模型 - 文本的具象化表征"""
-    __tablename__ = "fungi"
+class UploadRequest(BaseModel):
+    """上传文本请求"""
+    user_id: str
+    content: str
+    dish_id: Optional[str] = None
 
-    fungus_id = Column(Integer, primary_key=True, index=True)
-    text = Column(String)  # 文本内容
-    image_id = Column(String)  # 贴图编号 (如 "03" -> assets/03.png)
-    creator_id = Column(Integer, ForeignKey("users.user_id"))  # 创建者
-    parent_ids = Column(JSON)  # 父真菌ID列表 (杂交时记录)
-    status = Column(String, default="idle")  # idle / incubating / in_air
-    location = Column(String, default="air")  # air / dish_id
-    unlock_time = Column(DateTime, nullable=True)  # 孵化完成时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
 
-    def to_dict(self):
-        return {
-            "fungus_id": self.fungus_id,
-            "text": self.text,
-            "image_id": self.image_id,
-            "creator_id": self.creator_id,
-            "parent_ids": self.parent_ids,
-            "status": self.status,
-            "location": self.location,
-            "unlock_time": self.unlock_time.isoformat() if self.unlock_time else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None
-        }
+class BreatheRequest(BaseModel):
+    """呼吸请求"""
+    dish_id: str
+
+
+class TriggerHybridRequest(BaseModel):
+    """触发杂交请求"""
+    fungus1_id: str
+    fungus2_id: str
+
+
+# ==================== 响应模型 ====================
+
+class UserResponse(BaseModel):
+    """用户响应"""
+    user_id: str
+    name: str
+    created_at: Optional[str] = None
+
+
+class DishResponse(BaseModel):
+    """培养皿响应"""
+    dish_id: str
+    user_id: str
+    name: str
+    created_at: Optional[str] = None
+
+
+class FungusResponse(BaseModel):
+    """真菌响应"""
+    fungus_id: str
+    dish_id: Optional[str] = None
+    user_id: str
+    content: str
+    image_id: str
+    status: str
+    location: str
+    unlock_time: Optional[str] = None
+    parent1_id: Optional[str] = None
+    parent2_id: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class DishDetailResponse(BaseModel):
+    """培养皿详情响应（包含真菌列表）"""
+    dish: DishResponse
+    fungi: List[FungusResponse] = []
+
+
+class AirResponse(BaseModel):
+    """空气响应（空气中的真菌列表）"""
+    fungi: List[FungusResponse] = []
+
+
+class MessageResponse(BaseModel):
+    """通用消息响应"""
+    message: str
+    data: Optional[dict] = None
