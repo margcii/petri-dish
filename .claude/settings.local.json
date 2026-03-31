@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -type f \\\\\\(-name *.md -o -name *.txt -o -name *.docx -o -name *.pdf \\\\\\))",
+      "Bash(cd:*)",
+      "Bash(npx create-vite@latest frontend --template react-ts)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(timeout 10 npm run dev)",
+      "Bash(curl -s http://localhost:8000/)",
+      "Bash(curl -s http://127.0.0.1:8000/)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(tasklist)",
+      "Bash(curl:*)"
+    ]
+  }
+}

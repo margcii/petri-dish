@@ -22,11 +22,11 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时连接数据库
     await db.connect()
-    print("✅ 数据库连接成功")
+    print("Database connected")
     yield
     # 关闭时断开连接
     await db.close()
-    print("✅ 数据库连接已关闭")
+    print("Database closed")
 
 
 app = FastAPI(

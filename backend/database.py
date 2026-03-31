@@ -3,10 +3,14 @@ Petri Dish 数据库操作类
 使用 aiosqlite 实现异步数据库操作
 """
 
+import os
 import aiosqlite
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+
+# 获取backend目录路径
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class Database:
@@ -33,7 +37,8 @@ class Database:
     
     async def _init_tables(self):
         """初始化数据库表"""
-        with open("schema.sql", "r", encoding="utf-8") as f:
+        schema_path = os.path.join(BACKEND_DIR, "schema.sql")
+        with open(schema_path, "r", encoding="utf-8") as f:
             schema = f.read()
         await self._db.executescript(schema)
         await self._db.commit()
