@@ -5,11 +5,14 @@ export interface Dish {
   user_id: number
   name: string
   created_at: string
+  fungus_count?: number
 }
 
-export interface DishDetail {
+export interface DishWithFungi {
   dish_id: number
+  user_id: number
   name: string
+  created_at: string
   fungi: Fungus[]
 }
 
@@ -28,7 +31,12 @@ export const createDish = async (userId: number, name: string): Promise<Dish> =>
   return res.data
 }
 
-export const getDish = async (dishId: number): Promise<DishDetail> => {
+export const getUserDishes = async (userId: number): Promise<Dish[]> => {
+  const res = await client.get(`/user_dishes/${userId}`)
+  return res.data.dishes
+}
+
+export const getDish = async (dishId: number): Promise<DishWithFungi> => {
   const res = await client.get(`/get_dish/${dishId}`)
   return res.data
 }
