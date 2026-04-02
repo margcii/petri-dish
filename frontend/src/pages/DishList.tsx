@@ -24,7 +24,7 @@ function DishList() {
     fetchDishes(storedUser.user_id)
   }, [navigate])
 
-  const fetchDishes = async (userId: number) => {
+  const fetchDishes = async (userId: string) => {
     try {
       const data = await getUserDishes(userId)
       setDishes(data)
@@ -70,7 +70,7 @@ function DishList() {
     }
   }
 
-  const handleDishClick = (dishId: number) => {
+  const handleDishClick = (dishId: string) => {
     navigate(`/dishes/${dishId}`)
   }
 
@@ -88,6 +88,13 @@ function DishList() {
       <header className="bg-slate-800/50 border-b border-slate-700/50 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/main')}
+              className="text-slate-400 hover:text-white transition-colors mr-2"
+              title="返回主页面"
+            >
+              ← 返回
+            </button>
             <span className="text-2xl">🧫</span>
             <h1 className="text-xl font-semibold text-white">Petri Dish</h1>
           </div>

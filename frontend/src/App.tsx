@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Welcome from './pages/Welcome'
+import Main from './pages/Main'
 import DishList from './pages/DishList'
 import DishDetail from './pages/DishDetail'
 
@@ -8,6 +9,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Welcome />} />
+        <Route path="/main" element={<Main />} />
         <Route path="/dishes" element={<DishList />} />
         <Route path="/dishes/:dishId" element={<DishDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />

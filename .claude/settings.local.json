@@ -43,7 +43,13 @@
       "Bash(\"D:/software/programming/Anaconda3/python.exe\" -m pip install -r requirements.txt)",
       "Bash(\"D:/software/programming/Anaconda3/python.exe\" -m pip install fastapi uvicorn aiosqlite pydantic python-multipart --upgrade)",
       "Bash(\"D:/software/programming/Anaconda3/python.exe\" -m uvicorn api:app --host 127.0.0.1 --port 8000)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Skill(update-config)",
+      "Bash(python3 run.py)",
+      "Bash(\"D:/software/programming/Anaconda3/python.exe\" run.py)",
+      "Bash(npx kill-port:*)",
+      "Bash(sed:*)"
     ]
-  }
+  },
+  "language": "chinese"
 }

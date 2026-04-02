@@ -12,7 +12,7 @@ function Welcome() {
   useEffect(() => {
     const existingUser = getStoredUser()
     if (existingUser) {
-      navigate('/dishes')
+      navigate('/main')
     }
   }, [navigate])
 
@@ -29,7 +29,7 @@ function Welcome() {
     try {
       const user = await registerUser(name.trim())
       storeUser(user)
-      navigate('/dishes')
+      navigate('/main')
     } catch (err: any) {
       setError(err.response?.data?.detail || '创建用户失败，请重试')
     } finally {

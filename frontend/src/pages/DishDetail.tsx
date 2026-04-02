@@ -26,7 +26,7 @@ function DishDetail() {
 
     const fetchDish = async () => {
       try {
-        const data = await getDish(Number(dishId))
+        const data = await getDish(dishId)
         setDish(data)
       } catch (err: any) {
         setError(err.response?.data?.detail || '加载培养皿失败')
