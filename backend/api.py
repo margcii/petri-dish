@@ -107,8 +107,8 @@ async def upload(request: UploadRequest):
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
-    # 生成随机图片ID
-    image_id = generate_image_id()
+    # 使用前端提供的 image_id，如果没有则生成随机值
+    image_id = request.image_id if request.image_id else generate_image_id()
     
     # 确定位置和状态
     if request.dish_id:

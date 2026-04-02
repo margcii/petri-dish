@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStoredUser, clearUser, type User } from '../api/user'
-import { getUserDishes, createDish, type Dish } from '../api/dish'
+import { getUserDishes, createDish, getDish, type Dish, type Fungus } from '../api/dish'
+import { uploadFungus } from '../api/fungus'
 
 // 真菌颜色选项
 const FUNGUS_COLORS = [
@@ -13,12 +14,16 @@ const FUNGUS_COLORS = [
   { id: 'red', emoji: '🟥', bg: 'bg-red-500', border: 'border-red-400' },
 ]
 
-// 模拟真菌数据
-interface MockFungus {
-  id: number
-  color: typeof FUNGUS_COLORS[0]
-  status: 'idle' | 'incubating' | 'hybrid'
-  isHybridGroup?: boolean
+// 真菌颜色选项 - 基于 image_id 映射
+const getFungusColor = (imageId: string) => {
+  // 直接匹配颜色 id
+  const matchedColor = FUNGUS_COLORS.find(c => c.id === imageId)
+  if (matchedColor) return matchedColor
+
+  // 如果无法匹配，使用旧逻辑作为后备
+  const firstChar = imageId.charAt(0).toLowerCase()
+  const colorIndex = firstChar.charCodeAt(0) % FUNGUS_COLORS.length
+  return FUNGUS_COLORS[colorIndex]
 }
 
 function Main() {
@@ -26,22 +31,38 @@ function Main() {
   const [user, setUser] = useState<User | null>(null)
   const [dishes, setDishes] = useState<Dish[]>([])
   const [activeDishIndex, setActiveDishIndex] = useState(0)
+  const [activeDishFungi, setActiveDishFungi] = useState<Fungus[]>([])
+  const [isLoadingFungi, setIsLoadingFungi] = useState(false)
   const [text, setText] = useState('')
   const [selectedColor, setSelectedColor] = useState(FUNGUS_COLORS[0])
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [newDishName, setNewDishName] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
+  const [selectedFungus, setSelectedFungus] = useState<Fungus | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // 模拟真菌数据（10个位置）
-  const [mockFungi] = useState<MockFungus[]>([
-    { id: 1, color: FUNGUS_COLORS[0], status: 'idle' },
-    { id: 2, color: FUNGUS_COLORS[1], status: 'idle' },
-    { id: 3, color: FUNGUS_COLORS[5], status: 'idle' },
-    { id: 4, color: FUNGUS_COLORS[0], status: 'incubating' },
-    { id: 5, color: FUNGUS_COLORS[1], status: 'hybrid', isHybridGroup: true },
-    { id: 6, color: FUNGUS_COLORS[5], status: 'hybrid', isHybridGroup: true },
-  ])
+  // 加载活跃培养皿的真菌数据
+  const fetchActiveDishFungi = async () => {
+    if (!activeDish) {
+      setActiveDishFungi([])
+      return
+    }
+    setIsLoadingFungi(true)
+    try {
+      const dishDetail = await getDish(activeDish.dish_id)
+      setActiveDishFungi(dishDetail.fungi || [])
+    } catch (err) {
+      console.error('加载真菌失败:', err)
+    } finally {
+      setIsLoadingFungi(false)
+    }
+  }
+
+  // 当活跃培养皿变化时，刷新真菌数据
+  useEffect(() => {
+    fetchActiveDishFungi()
+  }, [activeDishIndex, dishes])
 
   useEffect(() => {
     const storedUser = getStoredUser()
@@ -109,47 +130,59 @@ function Main() {
 
   const activeDish = dishes[activeDishIndex]
 
+  // 处理放入活跃培养皿
+  const handleAddToActiveDish = async () => {
+    if (!text.trim() || !user || !activeDish) return
+
+    setIsUploading(true)
+    console.log('选择的颜色:', selectedColor)
+    console.log('发送的 image_id:', selectedColor.id)
+    try {
+      const result = await uploadFungus({
+        user_id: user.user_id,
+        content: text.trim(),
+        dish_id: activeDish.dish_id,
+        image_id: selectedColor.id
+      })
+      console.log('返回的真菌:', result)
+      console.log('返回的 image_id:', result.image_id)
+      // 清空输入框
+      setText('')
+      // 刷新真菌列表
+      await fetchActiveDishFungi()
+      // 关闭下拉菜单
+      setIsDropdownOpen(false)
+    } catch (err) {
+      console.error('上传真菌失败:', err)
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   // 渲染单个真菌
-  const renderFungus = (fungus: MockFungus, index: number) => {
+  const renderFungus = (fungus: Fungus) => {
+    const color = getFungusColor(fungus.image_id)
     const baseClasses = 'w-12 h-12 rounded-lg flex items-center justify-center text-2xl transition-all duration-300'
 
     if (fungus.status === 'incubating') {
       return (
         <div
-          key={fungus.id}
-          className={`${baseClasses} ${fungus.color.bg} opacity-50 animate-pulse cursor-not-allowed`}
+          key={fungus.fungus_id}
+          className={`${baseClasses} ${color.bg} opacity-50 animate-pulse cursor-not-allowed`}
         >
-          {fungus.color.emoji}
-        </div>
-      )
-    }
-
-    if (fungus.status === 'hybrid' && fungus.isHybridGroup) {
-      // 杂交组：品字形重合效果
-      const positions = [
-        { top: '0%', left: '0%', zIndex: 3 },
-        { top: '20%', left: '30%', zIndex: 2 },
-        { top: '40%', left: '15%', zIndex: 1 },
-      ]
-      const pos = positions[index % 3]
-      return (
-        <div key={fungus.id} className="relative w-12 h-12">
-          <div
-            className={`absolute w-10 h-10 rounded-lg ${fungus.color.bg} opacity-70 flex items-center justify-center text-lg`}
-            style={{ top: pos.top, left: pos.left, zIndex: pos.zIndex }}
-          >
-            {fungus.color.emoji}
-          </div>
+          {color.emoji}
         </div>
       )
     }
 
     return (
       <div
-        key={fungus.id}
-        className={`${baseClasses} ${fungus.color.bg} hover:ring-2 hover:ring-white hover:scale-110 cursor-pointer`}
+        key={fungus.fungus_id}
+        onClick={() => setSelectedFungus(fungus)}
+        className={`${baseClasses} ${color.bg} hover:ring-2 hover:ring-white hover:scale-110 cursor-pointer`}
+        title={`${fungus.content.slice(0, 50)}${fungus.content.length > 50 ? '...' : ''}`}
       >
-        {fungus.color.emoji}
+        {color.emoji}
       </div>
     )
   }
@@ -198,20 +231,26 @@ function Main() {
               </div>
             ) : (
               <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 sm:gap-3">
-                {Array.from({ length: 10 }).map((_, index) => {
-                  const fungus = mockFungi[index]
-                  if (!fungus) {
-                    return (
+                {isLoadingFungi ? (
+                  <div className="col-span-full text-center py-4 text-slate-400">
+                    加载中...
+                  </div>
+                ) : (
+                  <>
+                    {activeDishFungi.slice(0, 10).map((fungus) => (
+                      renderFungus(fungus)
+                    ))}
+                    {/* 空位占位 */}
+                    {Array.from({ length: Math.max(0, 10 - activeDishFungi.length) }).map((_, index) => (
                       <div
-                        key={index}
+                        key={`empty-${index}`}
                         className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg border-2 border-dashed border-slate-600/50 flex items-center justify-center"
                       >
-                        <span className="text-slate-600 text-xs">{index + 1}</span>
+                        <span className="text-slate-600 text-xs">{activeDishFungi.length + index + 1}</span>
                       </div>
-                    )
-                  }
-                  return renderFungus(fungus, index)
-                })}
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -252,7 +291,7 @@ function Main() {
             />
             <div className="flex justify-between mt-2 text-sm text-slate-500">
               <span>{text.length}/500</span>
-              <span>CP2.4 将实现真实真菌创建</span>
+              <span>{activeDishFungi.length}/10 真菌</span>
             </div>
           </div>
 
@@ -294,10 +333,13 @@ function Main() {
                   {/* 活跃培养皿选项 */}
                   <div className="p-2">
                     <button
-                      className="w-full px-3 py-2 text-left text-white bg-emerald-600/20 border border-emerald-500/30 rounded-lg flex items-center gap-2 hover:bg-emerald-600/30 transition-colors"
+                      onClick={handleAddToActiveDish}
+                      disabled={!text.trim() || isUploading || !activeDish}
+                      className="w-full px-3 py-2 text-left text-white bg-emerald-600/20 border border-emerald-500/30 rounded-lg flex items-center gap-2 hover:bg-emerald-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <span>🧫</span>
                       <span className="flex-1 truncate">{activeDish ? `放入${activeDish.name}` : '放入活跃培养皿'}</span>
+                      {isUploading && <span className="animate-spin">⏳</span>}
                     </button>
                   </div>
 
@@ -407,6 +449,78 @@ function Main() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 真菌详情弹窗 */}
+      {selectedFungus && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          onClick={() => setSelectedFungus(null)}
+        >
+          <div
+            className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-6">
+              <div className="flex items-center gap-4">
+                <div className={`w-16 h-16 rounded-xl ${getFungusColor(selectedFungus.image_id).bg} flex items-center justify-center`}>
+                  <span className="text-3xl">{getFungusColor(selectedFungus.image_id).emoji}</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">真菌详情</h3>
+                  <p className="text-slate-400 text-sm">
+                    状态: <span className={selectedFungus.status === 'idle' ? 'text-emerald-400' : 'text-amber-400'}>
+                      {selectedFungus.status === 'idle' ? '活跃' : selectedFungus.status}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedFungus(null)}
+                className="text-slate-400 hover:text-white transition-colors p-1"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 文本内容 */}
+              <div className="bg-slate-700/50 rounded-xl p-4">
+                <p className="text-slate-400 text-xs mb-2">内容</p>
+                <p className="text-white whitespace-pre-wrap">{selectedFungus.content}</p>
+              </div>
+
+              {/* 信息列表 */}
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between py-2 border-b border-slate-700/50">
+                  <span className="text-slate-400">真菌 ID</span>
+                  <span className="text-slate-300 font-mono">{selectedFungus.fungus_id}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-slate-700/50">
+                  <span className="text-slate-400">图片 ID</span>
+                  <span className="text-slate-300 font-mono">{selectedFungus.image_id}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-slate-700/50">
+                  <span className="text-slate-400">创建者 ID</span>
+                  <span className="text-slate-300 font-mono">{selectedFungus.user_id.slice(0, 16)}...</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-slate-700/50">
+                  <span className="text-slate-400">创建时间</span>
+                  <span className="text-slate-300">{new Date(selectedFungus.created_at).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSelectedFungus(null)}
+              className="w-full mt-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-colors"
+            >
+              关闭
+            </button>
           </div>
         </div>
       )}

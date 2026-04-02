@@ -18,11 +18,15 @@ export interface DishWithFungi {
 
 export interface Fungus {
   fungus_id: string
-  text: string
+  dish_id: string | null
+  user_id: string
+  content: string
   image_id: string
   status: 'idle' | 'incubating' | 'in_air'
   location: string
   unlock_time: string | null
+  parent1_id: string | null
+  parent2_id: string | null
   created_at: string
 }
 

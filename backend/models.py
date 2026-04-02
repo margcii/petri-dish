@@ -26,6 +26,7 @@ class UploadRequest(BaseModel):
     user_id: str
     content: str
     dish_id: Optional[str] = None
+    image_id: Optional[str] = None
 
 
 class BreatheRequest(BaseModel):
