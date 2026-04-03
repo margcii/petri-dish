@@ -55,6 +55,7 @@ class DishResponse(BaseModel):
     user_id: str
     name: str
     created_at: Optional[str] = None
+    fungus_count: Optional[int] = 0
 
 
 class FungusResponse(BaseModel):

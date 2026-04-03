@@ -99,10 +99,12 @@ class Database:
             return None
     
     async def get_user_dishes(self, user_id: str) -> List[Dict[str, Any]]:
-        """获取用户的所有培养皿"""
+        """获取用户的所有培养皿（包含真菌数量）"""
         dishes = []
         async with self._db.execute(
-            "SELECT dish_id, user_id, name, created_at FROM dishes WHERE user_id = ?",
+            """SELECT d.dish_id, d.user_id, d.name, d.created_at,
+                      (SELECT COUNT(*) FROM fungi WHERE dish_id = d.dish_id AND status != 'in_air') as fungus_count
+               FROM dishes d WHERE d.user_id = ?""",
             (user_id,)
         ) as cursor:
             async for row in cursor:
@@ -110,7 +112,8 @@ class Database:
                     "dish_id": row[0],
                     "user_id": row[1],
                     "name": row[2],
-                    "created_at": row[3]
+                    "created_at": row[3],
+                    "fungus_count": row[4] or 0
                 })
         return dishes
     
