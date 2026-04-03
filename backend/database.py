@@ -6,7 +6,7 @@ Petri Dish 数据库操作类
 import os
 import aiosqlite
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 # 获取backend目录路径
@@ -256,14 +256,16 @@ class Database:
     ) -> str:
         """创建杂交真菌"""
         fungus_id = str(uuid.uuid4())
-        unlock_time = datetime.now().isoformat()
-        
+        # 5秒后解锁
+        unlock_time = (datetime.now() + timedelta(seconds=5)).isoformat()
+
         await self._db.execute(
-            """INSERT INTO fungi 
-               (fungus_id, dish_id, user_id, content, image_id, status, location, 
-                unlock_time, parent1_id, parent2_id) 
-               VALUES (?, ?, ?, ?, ?, 'incubating', 'air', ?, ?, ?)""",
-            (fungus_id, dish_id, user_id, content, image_id, unlock_time, 
+            """INSERT INTO fungi
+               (fungus_id, dish_id, user_id, content, image_id, status, location,
+                unlock_time, parent1_id, parent2_id)
+               VALUES (?, ?, ?, ?, ?, 'incubating', ?, ?, ?, ?)""",
+            (fungus_id, dish_id, user_id, content, image_id,
+             dish_id if dish_id else 'air', unlock_time,
              parent1_id, parent2_id)
         )
         await self._db.commit()

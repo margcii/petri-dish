@@ -174,22 +174,28 @@ async def trigger_hybrid(request: TriggerHybridRequest):
     """触发杂交"""
     fungus1 = await db.get_fungus(request.fungus1_id)
     fungus2 = await db.get_fungus(request.fungus2_id)
-    
+
     if not fungus1 or not fungus2:
         raise HTTPException(status_code=404, detail="真菌不存在")
-    
-    # 创建杂交真菌
+
+    # 将父真菌标记为 incubating（参与杂交）
+    await db.update_fungus_status(fungus1["fungus_id"], "incubating")
+    await db.update_fungus_status(fungus2["fungus_id"], "incubating")
+
+    # 创建杂交真菌（继承父真菌的dish_id）
     hybrid_content = f"{fungus1['content'][:50]} + {fungus2['content'][:50]}"
     image_id = generate_image_id()
-    
+    dish_id = fungus1.get("dish_id") or fungus2.get("dish_id")
+
     hybrid_id = await db.create_hybrid_fungus(
         user_id=fungus1["user_id"],
         content=hybrid_content,
         image_id=image_id,
         parent1_id=fungus1["fungus_id"],
-        parent2_id=fungus2["fungus_id"]
+        parent2_id=fungus2["fungus_id"],
+        dish_id=dish_id
     )
-    
+
     hybrid = await db.get_fungus(hybrid_id)
     return FungusResponse(**hybrid)
 

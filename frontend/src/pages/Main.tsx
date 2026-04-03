@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStoredUser, clearUser, type User } from '../api/user'
 import { getUserDishes, createDish, getDish, type Dish, type Fungus } from '../api/dish'
-import { uploadFungus, getAirFungi } from '../api/fungus'
+import { uploadFungus, getAirFungi, triggerHybrid, checkHybridStatus } from '../api/fungus'
 
 // 真菌颜色选项
 const FUNGUS_COLORS = [
@@ -40,10 +40,30 @@ function Main() {
   const [newDishName, setNewDishName] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [selectedFungus, setSelectedFungus] = useState<Fungus | null>(null)
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Ctrl 键检测
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Control') setIsCtrlPressed(true)
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') setIsCtrlPressed(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [])
 
   // 空气区状态
   const [airFungi, setAirFungi] = useState<Fungus[]>([])
+
+  // 计算活跃培养皿
+  const activeDish = dishes[activeDishIndex]
 
   // 加载空气真菌（5秒轮询）
   useEffect(() => {
@@ -104,6 +124,61 @@ function Main() {
   useEffect(() => {
     fetchActiveDishFungi()
   }, [activeDishIndex, dishes])
+
+  // 自动检测杂交 + 检查孵化状态
+  useEffect(() => {
+    if (!activeDish) return
+
+    const checkHybridAndIncubation = async () => {
+      try {
+        const dishDetail = await getDish(activeDish.dish_id)
+        const fungi = dishDetail.fungi || []
+
+        // 检查是否有 incubating 的真菌需要更新状态
+        const incubatingFungi = fungi.filter((f: Fungus) => f.status === 'incubating')
+        for (const fungus of incubatingFungi) {
+          try {
+            await checkHybridStatus(fungus.fungus_id)
+          } catch (err) {
+            console.error('检查孵化状态失败:', err)
+          }
+        }
+
+        // 重新获取更新后的数据
+        const updatedDishDetail = await getDish(activeDish.dish_id)
+        const updatedFungi = updatedDishDetail.fungi || []
+        setActiveDishFungi(updatedFungi)
+
+        const idleFungi = updatedFungi.filter((f: Fungus) => f.status === 'idle')
+        console.log('检测杂交:', idleFungi.length, '个idle真菌')
+
+        // 如果有 ≥2 个 idle 真菌，触发杂交
+        if (idleFungi.length >= 2) {
+          const shuffled = [...idleFungi].sort(() => Math.random() - 0.5)
+          const selected = shuffled.slice(0, 2)
+
+          console.log('触发杂交:', selected[0].fungus_id.slice(0,8), selected[1].fungus_id.slice(0,8))
+
+          try {
+            await triggerHybrid(selected[0].fungus_id, selected[1].fungus_id)
+            // 刷新真菌列表
+            await fetchActiveDishFungi()
+          } catch (err) {
+            console.error('自动杂交失败:', err)
+          }
+        }
+      } catch (err) {
+        console.error('检测杂交失败:', err)
+      }
+    }
+
+    // 立即检测一次
+    checkHybridAndIncubation()
+
+    // 每5秒检测一次
+    const interval = setInterval(checkHybridAndIncubation, 5000)
+    return () => clearInterval(interval)
+  }, [activeDish?.dish_id])
 
   useEffect(() => {
     const storedUser = getStoredUser()
@@ -189,8 +264,6 @@ function Main() {
     }
   }
 
-  const activeDish = dishes[activeDishIndex]
-
   // 处理放入活跃培养皿
   const handleAddToActiveDish = async () => {
     if (!text.trim() || !user || !activeDish) return
@@ -223,27 +296,40 @@ function Main() {
   // 渲染单个真菌
   const renderFungus = (fungus: Fungus) => {
     const color = getFungusColor(fungus.image_id)
-    const baseClasses = 'w-12 h-12 rounded-lg flex items-center justify-center text-2xl transition-all duration-300'
+    const baseClasses = 'w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-2xl transition-all duration-300 relative'
 
+    // 孵化状态：半透明闪烁，但可点击查看
     if (fungus.status === 'incubating') {
       return (
         <div
           key={fungus.fungus_id}
-          className={`${baseClasses} ${color.bg} opacity-50 animate-pulse cursor-not-allowed`}
+          onClick={() => setSelectedFungus(fungus)}
+          className={`${baseClasses} ${color.bg} opacity-40 animate-pulse cursor-pointer hover:ring-2 hover:ring-white`}
+          title="孵化中... (点击查看)"
         >
           {color.emoji}
+          <span className="absolute -top-1 -right-1 text-xs">⏳</span>
         </div>
       )
     }
 
+    // 杂交结果真菌：检查是否有 parent1_id/parent2_id
+    const isHybridResult = fungus.parent1_id && fungus.parent2_id
+
     return (
       <div
         key={fungus.fungus_id}
-        onClick={() => setSelectedFungus(fungus)}
-        className={`${baseClasses} ${color.bg} hover:ring-2 hover:ring-white hover:scale-110 cursor-pointer`}
-        title={`${fungus.content.slice(0, 50)}${fungus.content.length > 50 ? '...' : ''}`}
+        onClick={() => !isCtrlPressed && setSelectedFungus(fungus)}
+        className={`${baseClasses} ${color.bg} hover:ring-2 hover:ring-white hover:scale-110 ${isCtrlPressed && isHybridResult ? 'ring-2 ring-yellow-400' : 'cursor-pointer'}`}
+        title={isCtrlPressed && isHybridResult ? 'Ctrl+点击查看杂交结果' : `${fungus.content.slice(0, 50)}${fungus.content.length > 50 ? '...' : ''}`}
       >
         {color.emoji}
+        {/* Ctrl+悬停时显示杂交标记 */}
+        {isHybridResult && (
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full text-[8px] flex items-center justify-center">
+            ⚡
+          </span>
+        )}
       </div>
     )
   }
