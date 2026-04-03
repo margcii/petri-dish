@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStoredUser, clearUser, type User } from '../api/user'
 import { getUserDishes, createDish, getDish, type Dish, type Fungus } from '../api/dish'
-import { uploadFungus } from '../api/fungus'
+import { uploadFungus, getAirFungi } from '../api/fungus'
 
 // 真菌颜色选项
 const FUNGUS_COLORS = [
@@ -41,6 +41,47 @@ function Main() {
   const [isUploading, setIsUploading] = useState(false)
   const [selectedFungus, setSelectedFungus] = useState<Fungus | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // 空气区状态
+  const [airFungi, setAirFungi] = useState<Fungus[]>([])
+
+  // 加载空气真菌（5秒轮询）
+  useEffect(() => {
+    const fetchAirFungi = async () => {
+      try {
+        const fungi = await getAirFungi()
+        setAirFungi(fungi)
+      } catch (err) {
+        console.error('加载空气真菌失败:', err)
+      }
+    }
+
+    fetchAirFungi()
+    const interval = setInterval(fetchAirFungi, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // 处理发射到空气
+  const handleLaunchToAir = async () => {
+    if (!text.trim() || !user) return
+
+    setIsUploading(true)
+    try {
+      await uploadFungus({
+        user_id: user.user_id,
+        content: text.trim(),
+        image_id: selectedColor.id
+      })
+      setText('')
+      // 刷新空气区
+      const fungi = await getAirFungi()
+      setAirFungi(fungi)
+    } catch (err) {
+      console.error('发射到空气失败:', err)
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   // 加载活跃培养皿的真菌数据
   const fetchActiveDishFungi = async () => {
@@ -274,6 +315,35 @@ function Main() {
               </div>
             )}
           </div>
+
+          {/* 空气展示区 */}
+          <div className="mt-4 bg-gradient-to-r from-slate-800/30 via-blue-900/20 to-slate-800/30 rounded-2xl p-4 border border-blue-500/20">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">💨</span>
+              <span className="text-slate-300 font-medium">空气</span>
+              <span className="text-slate-500 text-sm">({airFungi.length} 个真菌)</span>
+            </div>
+            {/* 漂浮的真菌 */}
+            <div className="flex flex-wrap gap-2 min-h-[60px]">
+              {airFungi.length === 0 ? (
+                <span className="text-slate-500 text-sm italic">空气空无一物...</span>
+              ) : (
+                airFungi.map((fungus, index) => (
+                  <div
+                    key={fungus.fungus_id}
+                    className={`w-10 h-10 rounded-lg ${getFungusColor(fungus.image_id).bg} flex items-center justify-center text-lg animate-pulse`}
+                    style={{
+                      animationDelay: `${index * 0.2}s`,
+                      animationDuration: '3s'
+                    }}
+                    title={fungus.content.slice(0, 50)}
+                  >
+                    {getFungusColor(fungus.image_id).emoji}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </header>
 
@@ -322,11 +392,13 @@ function Main() {
           <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
             {/* 发射按钮 */}
             <button
-              className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!text.trim() || dishes.length === 0}
+              onClick={handleLaunchToAir}
+              disabled={!text.trim() || isUploading}
+              className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-all flex items-center gap-2"
             >
               <span>🚀</span>
               <span>发射</span>
+              {isUploading && <span className="animate-spin">⏳</span>}
             </button>
 
             {/* 放入培养皿按钮（带下拉） */}
