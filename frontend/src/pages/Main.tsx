@@ -89,6 +89,14 @@ function Main() {
     try {
       const data = await getUserDishes(userId)
       setDishes(data)
+      // 从 localStorage 读取活跃培养皿设置
+      const savedActiveDishId = localStorage.getItem('activeDishId')
+      if (savedActiveDishId) {
+        const index = data.findIndex(d => d.dish_id === savedActiveDishId)
+        if (index !== -1) {
+          setActiveDishIndex(index)
+        }
+      }
     } catch {
       // 静默处理错误
     }
@@ -100,11 +108,23 @@ function Main() {
   }
 
   const handlePrevDish = () => {
-    setActiveDishIndex((prev) => (prev > 0 ? prev - 1 : prev))
+    setActiveDishIndex((prev) => {
+      const newIndex = prev > 0 ? prev - 1 : prev
+      if (dishes[newIndex]) {
+        localStorage.setItem('activeDishId', dishes[newIndex].dish_id)
+      }
+      return newIndex
+    })
   }
 
   const handleNextDish = () => {
-    setActiveDishIndex((prev) => (prev < dishes.length - 1 ? prev + 1 : prev))
+    setActiveDishIndex((prev) => {
+      const newIndex = prev < dishes.length - 1 ? prev + 1 : prev
+      if (dishes[newIndex]) {
+        localStorage.setItem('activeDishId', dishes[newIndex].dish_id)
+      }
+      return newIndex
+    })
   }
 
   const handleRandomColor = () => {

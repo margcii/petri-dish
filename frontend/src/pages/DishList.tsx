@@ -74,6 +74,13 @@ function DishList() {
     navigate(`/dishes/${dishId}`)
   }
 
+  const setAsActiveDish = (e: React.MouseEvent, dishId: string) => {
+    e.stopPropagation()
+    localStorage.setItem('activeDishId', dishId)
+    // 可选：显示提示
+    alert('已设为主页面活跃培养皿')
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -166,14 +173,21 @@ function DishList() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center justify-between text-sm mb-3">
                   <span className="text-slate-400">
-                    {dish.fungus_count || 0} 个真菌
+                    {dish.fungus_count || 0}/10 真菌
                   </span>
                   <span className="text-emerald-400 group-hover:translate-x-1 transition-transform">
                     进入 →
                   </span>
                 </div>
+                {/* 设为主页面活跃按钮 */}
+                <button
+                  onClick={(e) => setAsActiveDish(e, dish.dish_id)}
+                  className="w-full py-2 bg-slate-700/50 hover:bg-emerald-600/30 border border-slate-600 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 text-sm rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                >
+                  设为主页面活跃
+                </button>
               </div>
             ))}
           </div>
