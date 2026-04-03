@@ -1,6 +1,7 @@
 # Petri Dish 记忆索引
 
 ## 项目进展
+- [CP2.7 完成](project_cp2.7_complete.md) — 杂交系统（自动分组+孵化）
 - [CP2.6 完成](project_cp2.6_complete.md) — 空气传播机制（前端）
 - [CP2.5 完成](project_cp2.5_complete.md) — 培养皿库 + 切换机制
 - [CP2.4 完成](project_cp2.4_complete.md) — 真菌上传 + 基础放入功能
