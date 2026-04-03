@@ -1,6 +1,7 @@
 # Petri Dish 记忆索引
 
 ## 项目进展
+- [CP2.5 完成](project_cp2.5_complete.md) — 培养皿库 + 切换机制
 - [CP2.4 完成](project_cp2.4_complete.md) — 真菌上传 + 基础放入功能
 - [CP2.3 完成](project_cp2.3_complete.md) — 主界面重构 + 活跃培养皿显示
 
