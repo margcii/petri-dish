@@ -5,7 +5,18 @@
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    last_active TIMESTAMP,  -- 最后活跃时间（心跳更新）
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 杂交事件表
+CREATE TABLE IF NOT EXISTS hybrid_events (
+    event_id TEXT PRIMARY KEY,
+    dish_id TEXT NOT NULL,
+    fungus_id TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (dish_id) REFERENCES dishes(dish_id),
+    FOREIGN KEY (fungus_id) REFERENCES fungi(fungus_id)
 );
 
 -- 培养皿表
@@ -24,8 +35,9 @@ CREATE TABLE IF NOT EXISTS fungi (
     user_id TEXT NOT NULL,
     content TEXT NOT NULL,  -- 用户上传的文本
     image_id TEXT NOT NULL,  -- 随机生成的图片ID
-    status TEXT DEFAULT 'idle',  -- idle / incubating / in_air
+    status TEXT DEFAULT 'idle',  -- idle / incubating / in_air / hybridized
     location TEXT DEFAULT 'air',  -- air / dish_id
+    is_parent BOOLEAN DEFAULT 0,  -- 是否已作为亲本参与杂交（杂交后不再参与）
     unlock_time TIMESTAMP,  -- 孵化完成时间
     parent1_id TEXT,  -- 杂交亲本1
     parent2_id TEXT,  -- 杂交亲本2

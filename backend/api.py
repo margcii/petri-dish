@@ -2,11 +2,12 @@
 Petri Dish FastAPI 接口
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from contextlib import asynccontextmanager
 import random
 import string
 from datetime import datetime
+from typing import Optional
 
 from database import db
 from models import (
@@ -61,6 +62,23 @@ async def get_user(user_id: str):
     return UserResponse(**user)
 
 
+@app.post("/heartbeat")
+async def heartbeat(user_id: str = Query(..., description="用户ID")):
+    """用户心跳 - 更新最后活跃时间"""
+    user = await db.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    await db.update_user_last_active(user_id)
+    return {"message": "心跳已接收", "user_id": user_id}
+
+
+@app.get("/online_users")
+async def get_online_users(timeout_minutes: int = Query(default=5, description="超时时间（分钟）")):
+    """获取在线用户列表"""
+    users = await db.get_online_users(timeout_minutes)
+    return {"users": users, "count": len(users)}
+
+
 # ==================== 培养皿接口 ====================
 
 @app.post("/create_dish", response_model=DishResponse)
@@ -106,21 +124,25 @@ async def upload(request: UploadRequest):
     user = await db.get_user(request.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
+
     # 使用前端提供的 image_id，如果没有则生成随机值
     image_id = request.image_id if request.image_id else generate_image_id()
-    
+
     # 确定位置和状态
     if request.dish_id:
         dish = await db.get_dish(request.dish_id)
         if not dish:
             raise HTTPException(status_code=404, detail="培养皿不存在")
+        # 检查培养皿是否已满（10个真菌）
+        fungus_count = await db.get_dish_fungus_count(request.dish_id)
+        if fungus_count >= 10:
+            raise HTTPException(status_code=400, detail="培养皿已满（最多10个真菌）")
         location = "dish"
         status = "idle"
     else:
         location = "air"
         status = "in_air"
-    
+
     fungus_id = await db.create_fungus(
         user_id=request.user_id,
         content=request.content,
@@ -129,7 +151,7 @@ async def upload(request: UploadRequest):
         status=status,
         location=location
     )
-    
+
     fungus = await db.get_fungus(fungus_id)
     return FungusResponse(**fungus)
 
@@ -169,18 +191,66 @@ async def breathe(request: BreatheRequest):
     )
 
 
+@app.post("/distribute_air", response_model=MessageResponse)
+async def distribute_air(dish_id: str = Query(..., description="目标培养皿ID")):
+    """分配空气真菌到培养皿（用于空气自动分配机制）"""
+    dish = await db.get_dish(dish_id)
+    if not dish:
+        raise HTTPException(status_code=404, detail="培养皿不存在")
+
+    air_fungi = await db.get_air_fungi()
+    if not air_fungi:
+        return MessageResponse(message="空气中没有真菌")
+
+    # 检查培养皿是否已满
+    fungus_count = await db.get_dish_fungus_count(dish_id)
+    if fungus_count >= 10:
+        raise HTTPException(status_code=400, detail="培养皿已满（最多10个真菌）")
+
+    # 随机选择一个真菌分配
+    fungus = random.choice(air_fungi)
+
+    # 使用 move_fungus_to_dish 移动真菌
+    await db.move_fungus_to_dish(fungus["fungus_id"], dish_id)
+
+    return MessageResponse(
+        message=f"空气真菌已分配到培养皿",
+        data={"fungus_id": fungus["fungus_id"], "dish_id": dish_id}
+    )
+
+
+@app.get("/check_new_hybrid/{dish_id}")
+async def check_new_hybrid(
+    dish_id: str,
+    after: str = Query(..., description="查询此时间之后的新杂交事件（ISO格式时间戳）")
+):
+    """检查培养皿中指定时间之后的新杂交事件"""
+    dish = await db.get_dish(dish_id)
+    if not dish:
+        raise HTTPException(status_code=404, detail="培养皿不存在")
+
+    events = await db.check_new_hybrid(dish_id, after)
+    return {"events": events, "count": len(events)}
+
+
 @app.post("/trigger_hybrid", response_model=FungusResponse)
 async def trigger_hybrid(request: TriggerHybridRequest):
-    """触发杂交"""
+    """触发杂交 - 父母真菌标记为已使用，不再参与后续杂交"""
     fungus1 = await db.get_fungus(request.fungus1_id)
     fungus2 = await db.get_fungus(request.fungus2_id)
 
     if not fungus1 or not fungus2:
         raise HTTPException(status_code=404, detail="真菌不存在")
 
-    # 将父真菌标记为 incubating（参与杂交）
-    await db.update_fungus_status(fungus1["fungus_id"], "incubating")
-    await db.update_fungus_status(fungus2["fungus_id"], "incubating")
+    # 检查真菌是否已作为亲本参与过杂交
+    if fungus1.get("is_parent"):
+        raise HTTPException(status_code=400, detail="真菌1已参与过杂交")
+    if fungus2.get("is_parent"):
+        raise HTTPException(status_code=400, detail="真菌2已参与过杂交")
+
+    # 标记父母真菌为已使用（不再参与后续杂交）
+    await db.mark_fungus_as_parent(fungus1["fungus_id"])
+    await db.mark_fungus_as_parent(fungus2["fungus_id"])
 
     # 创建杂交真菌（继承父真菌的dish_id）
     hybrid_content = f"{fungus1['content'][:50]} + {fungus2['content'][:50]}"
@@ -195,6 +265,9 @@ async def trigger_hybrid(request: TriggerHybridRequest):
         parent2_id=fungus2["fungus_id"],
         dish_id=dish_id
     )
+
+    # 添加杂交事件记录
+    await db.add_hybrid_event(dish_id if dish_id else "air", hybrid_id)
 
     hybrid = await db.get_fungus(hybrid_id)
     return FungusResponse(**hybrid)

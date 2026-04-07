@@ -24,6 +24,7 @@ export interface Fungus {
   image_id: string
   status: 'idle' | 'incubating' | 'in_air'
   location: string
+  is_parent?: boolean  // 是否已作为亲本参与杂交（杂交后不显示）
   unlock_time: string | null
   parent1_id: string | null
   parent2_id: string | null

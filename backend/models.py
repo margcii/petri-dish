@@ -67,6 +67,7 @@ class FungusResponse(BaseModel):
     image_id: str
     status: str
     location: str
+    is_parent: Optional[bool] = False  # 是否已作为亲本参与杂交
     unlock_time: Optional[str] = None
     parent1_id: Optional[str] = None
     parent2_id: Optional[str] = None

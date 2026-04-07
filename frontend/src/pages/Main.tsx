@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStoredUser, clearUser, type User } from '../api/user'
 import { getUserDishes, createDish, getDish, type Dish, type Fungus } from '../api/dish'
-import { uploadFungus, getAirFungi, triggerHybrid, checkHybridStatus } from '../api/fungus'
+import { uploadFungus, getAirFungi, triggerHybrid, checkHybridStatus, sendHeartbeat, checkNewHybrid, type CheckNewHybridResponse } from '../api/fungus'
 
 // 真菌颜色选项
 const FUNGUS_COLORS = [
@@ -42,6 +42,9 @@ function Main() {
   const [selectedFungus, setSelectedFungus] = useState<Fungus | null>(null)
   const [isCtrlPressed, setIsCtrlPressed] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const [lastHybridCheck, setLastHybridCheck] = useState<string | null>(null)
+  const [hasNewHybrid, setHasNewHybrid] = useState(false)
+  const [isDishFullError, setIsDishFullError] = useState(false)
 
   // Ctrl 键检测
   useEffect(() => {
@@ -62,8 +65,64 @@ function Main() {
   // 空气区状态
   const [airFungi, setAirFungi] = useState<Fungus[]>([])
 
+  // 心跳机制 - 每30秒发送一次
+  useEffect(() => {
+    if (!user) return
+
+    const sendUserHeartbeat = async () => {
+      try {
+        await sendHeartbeat(user.user_id)
+      } catch (err) {
+        console.error('发送心跳失败:', err)
+      }
+    }
+
+    // 立即发送一次
+    sendUserHeartbeat()
+
+    // 每30秒发送一次
+    const interval = setInterval(sendUserHeartbeat, 30000)
+    return () => clearInterval(interval)
+  }, [user])
+
   // 计算活跃培养皿
   const activeDish = dishes[activeDishIndex]
+
+  // 检测新杂交真菌
+  useEffect(() => {
+    if (!activeDish) {
+      setHasNewHybrid(false)
+      return
+    }
+
+    const checkNewHybrids = async () => {
+      try {
+        const result: CheckNewHybridResponse = await checkNewHybrid(
+          activeDish.dish_id,
+          lastHybridCheck || undefined
+        )
+
+        if (result.new_hybrids && result.new_hybrids.length > 0) {
+          setHasNewHybrid(true)
+          // 3秒后取消闪烁
+          setTimeout(() => setHasNewHybrid(false), 3000)
+        }
+
+        if (result.latest_timestamp) {
+          setLastHybridCheck(result.latest_timestamp)
+        }
+      } catch (err) {
+        console.error('检查新杂交失败:', err)
+      }
+    }
+
+    // 立即检测一次
+    checkNewHybrids()
+
+    // 每10秒检测一次
+    const interval = setInterval(checkNewHybrids, 10000)
+    return () => clearInterval(interval)
+  }, [activeDish?.dish_id])
 
   // 加载空气真菌（5秒轮询）
   useEffect(() => {
@@ -112,7 +171,9 @@ function Main() {
     setIsLoadingFungi(true)
     try {
       const dishDetail = await getDish(activeDish.dish_id)
-      setActiveDishFungi(dishDetail.fungi || [])
+      // 过滤掉已作为亲本的真菌（杂交后隐藏）
+      const displayFungi = (dishDetail.fungi || []).filter((f: Fungus) => !f.is_parent)
+      setActiveDishFungi(displayFungi)
     } catch (err) {
       console.error('加载真菌失败:', err)
     } finally {
@@ -147,10 +208,13 @@ function Main() {
         // 重新获取更新后的数据
         const updatedDishDetail = await getDish(activeDish.dish_id)
         const updatedFungi = updatedDishDetail.fungi || []
-        setActiveDishFungi(updatedFungi)
+        // 过滤掉已作为亲本的真菌（只显示可交互的真菌）
+        const displayFungi = updatedFungi.filter((f: Fungus) => !f.is_parent)
+        setActiveDishFungi(displayFungi)
 
-        const idleFungi = updatedFungi.filter((f: Fungus) => f.status === 'idle')
-        console.log('检测杂交:', idleFungi.length, '个idle真菌')
+        // 自动杂交检测：只选择非亲本的idle真菌
+        const idleFungi = updatedFungi.filter((f: Fungus) => f.status === 'idle' && !f.is_parent)
+        console.log('检测杂交:', idleFungi.length, '个idle真菌（排除已杂交）')
 
         // 如果有 ≥2 个 idle 真菌，触发杂交
         if (idleFungi.length >= 2) {
@@ -268,6 +332,13 @@ function Main() {
   const handleAddToActiveDish = async () => {
     if (!text.trim() || !user || !activeDish) return
 
+    // 检查容量限制
+    if (activeDishFungi.length >= 10) {
+      setIsDishFullError(true)
+      setTimeout(() => setIsDishFullError(false), 3000)
+      return
+    }
+
     setIsUploading(true)
     console.log('选择的颜色:', selectedColor)
     console.log('发送的 image_id:', selectedColor.id)
@@ -370,7 +441,7 @@ function Main() {
           </div>
 
           {/* 真菌展示区域（10个位置） */}
-          <div className="bg-slate-800/30 rounded-2xl p-4 min-h-[100px]">
+          <div className={`bg-slate-800/30 rounded-2xl p-4 min-h-[100px] transition-all duration-300 ${hasNewHybrid ? 'animate-pulse ring-2 ring-yellow-400' : ''}`}>
             {dishes.length === 0 ? (
               <div className="text-center text-slate-500 py-8">
                 <p>还没有培养皿</p>
@@ -467,8 +538,16 @@ function Main() {
             />
             <div className="flex justify-between mt-2 text-sm text-slate-500">
               <span>{text.length}/500</span>
-              <span>{activeDishFungi.length}/10 真菌</span>
+              <span className={activeDishFungi.length >= 10 ? 'text-red-400 font-semibold' : ''}>
+                {activeDishFungi.length}/10 真菌
+              </span>
             </div>
+            {/* 满员错误提示 */}
+            {isDishFullError && (
+              <div className="mt-2 text-red-400 text-sm animate-pulse">
+                培养皿已满（10/10），无法添加更多真菌
+              </div>
+            )}
           </div>
 
           {/* 分隔线 */}

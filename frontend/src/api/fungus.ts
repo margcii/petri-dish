@@ -81,3 +81,30 @@ export const getAirFungi = async (): Promise<Fungus[]> => {
   const res = await client.get('/air')
   return res.data.fungi
 }
+
+/**
+ * 发送心跳（在线状态检测）
+ * @param user_id - 用户ID
+ * @returns 操作结果
+ */
+export const sendHeartbeat = async (user_id: string): Promise<{ message: string }> => {
+  const res = await client.post('/heartbeat', { user_id })
+  return res.data
+}
+
+/**
+ * 检查新杂交真菌
+ * @param dish_id - 培养皿ID
+ * @param after - 可选，时间戳，查询此时间之后的新杂交
+ * @returns 新杂交真菌列表和最新时间戳
+ */
+export interface CheckNewHybridResponse {
+  new_hybrids: Fungus[]
+  latest_timestamp: string | null
+}
+
+export const checkNewHybrid = async (dish_id: string, after?: string): Promise<CheckNewHybridResponse> => {
+  const params = after ? { after } : {}
+  const res = await client.get(`/new_hybrid/${dish_id}`, { params })
+  return res.data
+}

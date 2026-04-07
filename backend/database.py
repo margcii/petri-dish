@@ -69,7 +69,31 @@ class Database:
                     "created_at": row[2]
                 }
             return None
-    
+
+    async def update_user_last_active(self, user_id: str):
+        """更新用户最后活跃时间"""
+        await self._db.execute(
+            "UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE user_id = ?",
+            (user_id,)
+        )
+        await self._db.commit()
+
+    async def get_online_users(self, timeout_minutes: int = 5) -> List[Dict[str, Any]]:
+        """获取在线用户（最近活跃）"""
+        cutoff_time = (datetime.now() - timedelta(minutes=timeout_minutes)).isoformat()
+        users = []
+        async with self._db.execute(
+            "SELECT user_id, name, last_active FROM users WHERE last_active > ?",
+            (cutoff_time,)
+        ) as cursor:
+            async for row in cursor:
+                users.append({
+                    "user_id": row[0],
+                    "name": row[1],
+                    "last_active": row[2]
+                })
+        return users
+
     # ==================== 培养皿操作 ====================
     
     async def create_dish(self, user_id: str, name: str) -> str:
@@ -142,8 +166,8 @@ class Database:
     async def get_fungus(self, fungus_id: str) -> Optional[Dict[str, Any]]:
         """获取真菌信息"""
         async with self._db.execute(
-            """SELECT fungus_id, dish_id, user_id, content, image_id, status, 
-                      location, unlock_time, parent1_id, parent2_id, created_at 
+            """SELECT fungus_id, dish_id, user_id, content, image_id, status,
+                      location, is_parent, unlock_time, parent1_id, parent2_id, created_at
                FROM fungi WHERE fungus_id = ?""",
             (fungus_id,)
         ) as cursor:
@@ -157,10 +181,11 @@ class Database:
                     "image_id": row[4],
                     "status": row[5],
                     "location": row[6],
-                    "unlock_time": row[7],
-                    "parent1_id": row[8],
-                    "parent2_id": row[9],
-                    "created_at": row[10]
+                    "is_parent": row[7],
+                    "unlock_time": row[8],
+                    "parent1_id": row[9],
+                    "parent2_id": row[10],
+                    "created_at": row[11]
                 }
             return None
     
@@ -168,8 +193,8 @@ class Database:
         """获取培养皿中的所有真菌"""
         fungi = []
         async with self._db.execute(
-            """SELECT fungus_id, dish_id, user_id, content, image_id, status, 
-                      location, unlock_time, parent1_id, parent2_id, created_at 
+            """SELECT fungus_id, dish_id, user_id, content, image_id, status,
+                      location, is_parent, unlock_time, parent1_id, parent2_id, created_at
                FROM fungi WHERE dish_id = ?""",
             (dish_id,)
         ) as cursor:
@@ -182,13 +207,39 @@ class Database:
                     "image_id": row[4],
                     "status": row[5],
                     "location": row[6],
-                    "unlock_time": row[7],
-                    "parent1_id": row[8],
-                    "parent2_id": row[9],
-                    "created_at": row[10]
+                    "is_parent": row[7],
+                    "unlock_time": row[8],
+                    "parent1_id": row[9],
+                    "parent2_id": row[10],
+                    "created_at": row[11]
                 })
         return fungi
-    
+
+    async def mark_fungus_as_parent(self, fungus_id: str):
+        """标记真菌已作为亲本参与杂交"""
+        await self._db.execute(
+            "UPDATE fungi SET is_parent = 1 WHERE fungus_id = ?",
+            (fungus_id,)
+        )
+        await self._db.commit()
+
+    async def get_dish_fungus_count(self, dish_id: str) -> int:
+        """获取培养皿中的真菌数量"""
+        async with self._db.execute(
+            "SELECT COUNT(*) FROM fungi WHERE dish_id = ? AND status != 'in_air'",
+            (dish_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+    async def move_fungus_to_dish(self, fungus_id: str, dish_id: str):
+        """将真菌移动到培养皿"""
+        await self._db.execute(
+            "UPDATE fungi SET dish_id = ?, location = 'dish', status = 'idle' WHERE fungus_id = ?",
+            (dish_id, fungus_id)
+        )
+        await self._db.commit()
+
     async def get_air_fungi(self) -> List[Dict[str, Any]]:
         """获取空气中的所有真菌"""
         fungi = []
@@ -270,6 +321,43 @@ class Database:
         )
         await self._db.commit()
         return fungus_id
+
+    async def add_hybrid_event(self, dish_id: str, fungus_id: str) -> str:
+        """添加杂交事件，返回 event_id"""
+        event_id = str(uuid.uuid4())
+        await self._db.execute(
+            """INSERT INTO hybrid_events (event_id, dish_id, fungus_id)
+               VALUES (?, ?, ?)""",
+            (event_id, dish_id, fungus_id)
+        )
+        await self._db.commit()
+        return event_id
+
+    async def check_new_hybrid(self, dish_id: str, since: str) -> List[Dict[str, Any]]:
+        """检查某个培养皿在指定时间之后的新杂交事件"""
+        events = []
+        async with self._db.execute(
+            """SELECT he.event_id, he.dish_id, he.fungus_id, he.created_at,
+                      f.content, f.image_id, f.parent1_id, f.parent2_id, f.status
+               FROM hybrid_events he
+               JOIN fungi f ON he.fungus_id = f.fungus_id
+               WHERE he.dish_id = ? AND he.created_at > ?
+               ORDER BY he.created_at DESC""",
+            (dish_id, since)
+        ) as cursor:
+            async for row in cursor:
+                events.append({
+                    "event_id": row[0],
+                    "dish_id": row[1],
+                    "fungus_id": row[2],
+                    "created_at": row[3],
+                    "content": row[4],
+                    "image_id": row[5],
+                    "parent1_id": row[6],
+                    "parent2_id": row[7],
+                    "status": row[8]
+                })
+        return events
 
 
 # 全局数据库实例
