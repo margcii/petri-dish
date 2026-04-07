@@ -105,6 +105,29 @@ export interface CheckNewHybridResponse {
 
 export const checkNewHybrid = async (dish_id: string, after?: string): Promise<CheckNewHybridResponse> => {
   const params = after ? { after } : {}
-  const res = await client.get(`/new_hybrid/${dish_id}`, { params })
+  const res = await client.get(`/check_new_hybrid/${dish_id}`, { params })
+  return res.data
+}
+
+/**
+ * 分配空气真菌到培养皿（支持fallback到库中其他培养皿）
+ * @param dish_id - 目标培养皿ID
+ * @param user_id - 用户ID（当目标培养皿满时用于fallback）
+ * @returns 操作结果消息
+ */
+export interface DistributeAirResponse {
+  message: string
+  data?: {
+    fungus_id: string
+    dish_id: string
+    dish_name?: string
+    fallback?: boolean
+  }
+}
+
+export const distributeAir = async (dish_id: string, user_id: string): Promise<DistributeAirResponse> => {
+  const res = await client.post('/distribute_air', null, {
+    params: { dish_id, user_id }
+  })
   return res.data
 }

@@ -140,6 +140,40 @@ class Database:
                     "fungus_count": row[4] or 0
                 })
         return dishes
+
+    async def get_user_available_dish(self, user_id: str, exclude_dish_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """获取用户第一个未满（<10个真菌）的培养皿
+
+        Args:
+            user_id: 用户ID
+            exclude_dish_id: 排除的培养皿ID（可选，用于跳过已满的活跃培养皿）
+
+        Returns:
+            未满的培养皿信息，如果没有则返回None
+        """
+        query = """SELECT d.dish_id, d.user_id, d.name, d.created_at,
+                      (SELECT COUNT(*) FROM fungi WHERE dish_id = d.dish_id AND status != 'in_air') as fungus_count
+               FROM dishes d WHERE d.user_id = ?"""
+        params = [user_id]
+
+        if exclude_dish_id:
+            query += " AND d.dish_id != ?"
+            params.append(exclude_dish_id)
+
+        query += " ORDER BY d.created_at ASC"
+
+        async with self._db.execute(query, params) as cursor:
+            async for row in cursor:
+                fungus_count = row[4] or 0
+                if fungus_count < 10:
+                    return {
+                        "dish_id": row[0],
+                        "user_id": row[1],
+                        "name": row[2],
+                        "created_at": row[3],
+                        "fungus_count": fungus_count
+                    }
+        return None
     
     # ==================== 真菌操作 ====================
     

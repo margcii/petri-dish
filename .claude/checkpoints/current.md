@@ -130,27 +130,45 @@
 
 **验收标准**:
 - [x] 一个培养皿最多10个真菌限制（`/upload`返回400错误）
-- [ ] 活跃培养皿满10个后，空气真菌进入库（待完善）
+- [x] 活跃培养皿满10个后，空气真菌自动进入库中其他未满培养皿
+- [x] 如果所有培养皿都满，返回 "所有培养皿已满" 错误
 - [x] 用户在线状态追踪（`/heartbeat` + `/online_users`）
 - [x] 新杂交发生提示（前端闪烁动画）
+- [x] 前端"从空气吸入真菌"按钮，支持显示fallback消息
 
 **API新增**:
 - `POST /heartbeat?user_id=xxx` - 用户心跳
 - `GET /online_users` - 获取在线用户
-- `POST /distribute_air?dish_id=xxx` - 分配空气真菌到培养皿
+- `POST /distribute_air?dish_id=xxx&user_id=yyy` - 分配空气真菌到培养皿（支持fallback）
 - `GET /check_new_hybrid/{dish_id}?after=xxx` - 检查新杂交事件
 
-**技术重点**: 在线状态检测，容量限制，闪烁动画
+**数据库新增**:
+- `get_user_available_dish(user_id, exclude_dish_id)` - 查找用户未满的培养皿
+
+**技术重点**: 在线状态检测，容量限制，闪烁动画，自动fallback机制
 
 ---
 
-### CP3: AI杂交集成 📋 待规划
-**目标**: 接入DeepSeek API实现智能文本杂交
+### CP3: AI杂交集成 ⏳ 当前
+**目标**: 接入 SiliconFlow API（DeepSeek-V3.2）实现智能文本杂交
+
+**API配置**:
+- **服务商**: SiliconFlow (硅基流动)
+- **Base URL**: `https://api.siliconflow.cn/v1`
+- **模型**: `deepseek-ai/DeepSeek-V3.2`
+- **文档**: https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions
 
 **验收标准**:
-- [ ] DeepSeek API密钥配置
-- [ ] CP2.7杂交结果调用AI混合文本
-- [ ] 替换占位杂交文本为真实AI生成内容
+- [ ] SiliconFlow API 客户端封装（backend/ai_client.py）
+- [ ] 环境变量配置（SILICONFLOW_API_KEY）
+- [ ] CP2.7 杂交结果调用 AI 混合文本
+- [ ] 替换占位杂交文本为真实 AI 生成内容
+- [ ] 错误降级：API 失败时使用简单拼接作为 fallback
+
+**技术重点**: 
+- 使用 `openai` 库兼容 SiliconFlow API
+- Prompt 设计：融合两个父真菌文本的核心概念
+- 异步调用避免阻塞 FastAPI 事件循环
 
 ---
 

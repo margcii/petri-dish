@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStoredUser, clearUser, type User } from '../api/user'
 import { getUserDishes, createDish, getDish, type Dish, type Fungus } from '../api/dish'
-import { uploadFungus, getAirFungi, triggerHybrid, checkHybridStatus, sendHeartbeat, checkNewHybrid, type CheckNewHybridResponse } from '../api/fungus'
+import { uploadFungus, getAirFungi, triggerHybrid, checkHybridStatus, sendHeartbeat, checkNewHybrid, distributeAir, type CheckNewHybridResponse, type DistributeAirResponse } from '../api/fungus'
 
 // 真菌颜色选项
 const FUNGUS_COLORS = [
@@ -44,6 +44,8 @@ function Main() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [lastHybridCheck, setLastHybridCheck] = useState<string | null>(null)
   const [hasNewHybrid, setHasNewHybrid] = useState(false)
+  const [isDistributing, setIsDistributing] = useState(false)
+  const [distributeMessage, setDistributeMessage] = useState<string | null>(null)
   const [isDishFullError, setIsDishFullError] = useState(false)
 
   // Ctrl 键检测
@@ -328,7 +330,29 @@ function Main() {
     }
   }
 
-  // 处理放入活跃培养皿
+  // 处理从空气分配真菌到活跃培养皿
+  const handleDistributeAir = async () => {
+    if (!activeDish || !user) return
+
+    setIsDistributing(true)
+    setDistributeMessage(null)
+    try {
+      const result: DistributeAirResponse = await distributeAir(activeDish.dish_id, user.user_id)
+      setDistributeMessage(result.message)
+      // 3秒后清除消息
+      setTimeout(() => setDistributeMessage(null), 3000)
+      // 刷新空气区和活跃培养皿
+      const fungi = await getAirFungi()
+      setAirFungi(fungi)
+      await fetchActiveDishFungi()
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || '分配失败'
+      setDistributeMessage(errorMsg)
+      setTimeout(() => setDistributeMessage(null), 3000)
+    } finally {
+      setIsDistributing(false)
+    }
+  }
   const handleAddToActiveDish = async () => {
     if (!text.trim() || !user || !activeDish) return
 
@@ -598,6 +622,27 @@ function Main() {
                       <span className="flex-1 truncate">{activeDish ? `放入${activeDish.name}` : '放入活跃培养皿'}</span>
                       {isUploading && <span className="animate-spin">⏳</span>}
                     </button>
+                  </div>
+
+                  {/* 分隔线 */}
+                  <div className="border-t border-slate-700"></div>
+
+                  {/* 从空气吸入真菌按钮 */}
+                  <div className="p-2">
+                    <button
+                      onClick={handleDistributeAir}
+                      disabled={isDistributing || !activeDish || airFungi.length === 0}
+                      className="w-full px-3 py-2 text-left text-white bg-blue-600/20 border border-blue-500/30 rounded-lg flex items-center gap-2 hover:bg-blue-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span>🌬️</span>
+                      <span className="flex-1 truncate">从空气吸入真菌</span>
+                      {isDistributing && <span className="animate-spin">⏳</span>}
+                    </button>
+                    {distributeMessage && (
+                      <p className={`text-xs mt-1 px-1 ${distributeMessage.includes('已满') ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {distributeMessage}
+                      </p>
+                    )}
                   </div>
 
                   {/* 分隔线 */}

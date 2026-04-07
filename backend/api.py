@@ -192,8 +192,15 @@ async def breathe(request: BreatheRequest):
 
 
 @app.post("/distribute_air", response_model=MessageResponse)
-async def distribute_air(dish_id: str = Query(..., description="目标培养皿ID")):
-    """分配空气真菌到培养皿（用于空气自动分配机制）"""
+async def distribute_air(
+    dish_id: str = Query(..., description="目标培养皿ID"),
+    user_id: str = Query(..., description="用户ID（用于当目标培养皿满时，fallback到库中其他培养皿）")
+):
+    """分配空气真菌到培养皿（用于空气自动分配机制）
+
+    如果目标培养皿已满，会自动尝试用户库中的其他未满培养皿。
+    如果所有培养皿都满，则返回错误。
+    """
     dish = await db.get_dish(dish_id)
     if not dish:
         raise HTTPException(status_code=404, detail="培养皿不存在")
@@ -202,20 +209,43 @@ async def distribute_air(dish_id: str = Query(..., description="目标培养皿I
     if not air_fungi:
         return MessageResponse(message="空气中没有真菌")
 
-    # 检查培养皿是否已满
+    # 检查目标培养皿是否已满
     fungus_count = await db.get_dish_fungus_count(dish_id)
+    target_dish_id = dish_id
+    target_dish_name = dish["name"]
+
     if fungus_count >= 10:
-        raise HTTPException(status_code=400, detail="培养皿已满（最多10个真菌）")
+        # 目标培养皿已满，尝试用户库中的其他未满培养皿
+        available_dish = await db.get_user_available_dish(user_id, exclude_dish_id=dish_id)
+        if not available_dish:
+            raise HTTPException(
+                status_code=400,
+                detail="所有培养皿已满（每个培养皿最多10个真菌）"
+            )
+        target_dish_id = available_dish["dish_id"]
+        target_dish_name = available_dish["name"]
 
     # 随机选择一个真菌分配
     fungus = random.choice(air_fungi)
 
     # 使用 move_fungus_to_dish 移动真菌
-    await db.move_fungus_to_dish(fungus["fungus_id"], dish_id)
+    await db.move_fungus_to_dish(fungus["fungus_id"], target_dish_id)
+
+    # 如果实际分配到了不同的培养皿，在消息中说明
+    if target_dish_id != dish_id:
+        return MessageResponse(
+            message=f"活跃培养皿已满，空气真菌已自动分配到培养皿「{target_dish_name}」",
+            data={
+                "fungus_id": fungus["fungus_id"],
+                "dish_id": target_dish_id,
+                "dish_name": target_dish_name,
+                "fallback": True
+            }
+        )
 
     return MessageResponse(
         message=f"空气真菌已分配到培养皿",
-        data={"fungus_id": fungus["fungus_id"], "dish_id": dish_id}
+        data={"fungus_id": fungus["fungus_id"], "dish_id": target_dish_id}
     )
 
 
