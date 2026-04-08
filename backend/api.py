@@ -2,6 +2,12 @@
 Petri Dish FastAPI 接口
 """
 
+from dotenv import load_dotenv
+from pathlib import Path
+# 加载环境变量（显式指定 .env 文件路径）
+env_path = Path(__file__).parent / '.env'
+load_dotenv(env_path)
+
 from fastapi import FastAPI, HTTPException, Query
 from contextlib import asynccontextmanager
 import random
@@ -11,11 +17,12 @@ from typing import Optional
 
 from database import db
 from models import (
-    RegisterRequest, CreateDishRequest, UploadRequest, 
+    RegisterRequest, CreateDishRequest, UploadRequest,
     BreatheRequest, TriggerHybridRequest,
-    UserResponse, DishResponse, FungusResponse, 
+    UserResponse, DishResponse, FungusResponse,
     DishDetailResponse, AirResponse, MessageResponse
 )
+import ai_client
 
 
 @asynccontextmanager
@@ -252,7 +259,7 @@ async def distribute_air(
 @app.get("/check_new_hybrid/{dish_id}")
 async def check_new_hybrid(
     dish_id: str,
-    after: str = Query(..., description="查询此时间之后的新杂交事件（ISO格式时间戳）")
+    after: Optional[str] = Query(default=None, description="查询此时间之后的新杂交事件（ISO格式时间戳）")
 ):
     """检查培养皿中指定时间之后的新杂交事件"""
     dish = await db.get_dish(dish_id)
@@ -282,8 +289,18 @@ async def trigger_hybrid(request: TriggerHybridRequest):
     await db.mark_fungus_as_parent(fungus1["fungus_id"])
     await db.mark_fungus_as_parent(fungus2["fungus_id"])
 
-    # 创建杂交真菌（继承父真菌的dish_id）
-    hybrid_content = f"{fungus1['content'][:50]} + {fungus2['content'][:50]}"
+    # 调用 AI 生成融合文本
+    print(f"[杂交] 开始AI融合: fungus1={fungus1['fungus_id'][:8]}, fungus2={fungus2['fungus_id'][:8]}")
+    ai_result = await ai_client.hybrid_text(
+        fungus1["content"],
+        fungus2["content"]
+    )
+    print(f"[杂交] AI结果: {ai_result[:100] if ai_result else 'None'}...")
+
+    # 如果 AI 生成失败，使用简单拼接作为 fallback
+    hybrid_content = ai_result if ai_result else f"{fungus1['content'][:50]} + {fungus2['content'][:50]}"
+    print(f"[杂交] 最终内容: {hybrid_content[:100]}...")
+
     image_id = generate_image_id()
     dish_id = fungus1.get("dish_id") or fungus2.get("dish_id")
 
@@ -333,6 +350,18 @@ async def root():
 async def health():
     """健康检查"""
     return {"status": "healthy"}
+
+
+@app.get("/debug_env")
+async def debug_env():
+    """调试环境变量"""
+    import os
+    return {
+        "SILICONFLOW_API_KEY": os.getenv("SILICONFLOW_API_KEY", "NOT SET")[:20] + "...",
+        "SILICONFLOW_BASE_URL": os.getenv("SILICONFLOW_BASE_URL", "NOT SET"),
+        "SILICONFLOW_MODEL": os.getenv("SILICONFLOW_MODEL", "NOT SET"),
+        "cwd": os.getcwd()
+    }
 
 
 if __name__ == "__main__":

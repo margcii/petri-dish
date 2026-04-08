@@ -173,8 +173,12 @@ function Main() {
     setIsLoadingFungi(true)
     try {
       const dishDetail = await getDish(activeDish.dish_id)
-      // 过滤掉已作为亲本的真菌（杂交后隐藏）
-      const displayFungi = (dishDetail.fungi || []).filter((f: Fungus) => !f.is_parent)
+      // 显示所有真菌，但父母真菌（没有parent_id的is_parent真菌）用特殊样式标记
+      const displayFungi = (dishDetail.fungi || []).filter((f: Fungus) => {
+        // 隐藏纯父母真菌（is_parent=true 且没有 parent1_id）
+        // 显示杂交结果真菌（有 parent1_id）和普通真菌
+        return !f.is_parent || f.parent1_id
+      })
       setActiveDishFungi(displayFungi)
     } catch (err) {
       console.error('加载真菌失败:', err)
@@ -210,13 +214,13 @@ function Main() {
         // 重新获取更新后的数据
         const updatedDishDetail = await getDish(activeDish.dish_id)
         const updatedFungi = updatedDishDetail.fungi || []
-        // 过滤掉已作为亲本的真菌（只显示可交互的真菌）
-        const displayFungi = updatedFungi.filter((f: Fungus) => !f.is_parent)
+        // 显示杂交结果真菌，隐藏纯父母真菌
+        const displayFungi = updatedFungi.filter((f: Fungus) => !f.is_parent || f.parent1_id)
         setActiveDishFungi(displayFungi)
 
-        // 自动杂交检测：只选择非亲本的idle真菌
+        // 自动杂交检测：只选择非亲本的idle真菌（所有is_parent=true的都不参与）
         const idleFungi = updatedFungi.filter((f: Fungus) => f.status === 'idle' && !f.is_parent)
-        console.log('检测杂交:', idleFungi.length, '个idle真菌（排除已杂交）')
+        console.log('检测杂交:', idleFungi.length, '个idle真菌（排除已杂交）', idleFungi.map((f: Fungus) => ({id: f.fungus_id.slice(0,8), is_parent: f.is_parent, status: f.status})))
 
         // 如果有 ≥2 个 idle 真菌，触发杂交
         if (idleFungi.length >= 2) {

@@ -8,6 +8,7 @@ export interface Fungus {
   image_id: string
   status: 'idle' | 'incubating' | 'in_air'
   location: string
+  is_parent?: boolean  // 是否已作为亲本参与杂交
   unlock_time: string | null
   parent1_id: string | null
   parent2_id: string | null
@@ -88,7 +89,7 @@ export const getAirFungi = async (): Promise<Fungus[]> => {
  * @returns 操作结果
  */
 export const sendHeartbeat = async (user_id: string): Promise<{ message: string }> => {
-  const res = await client.post('/heartbeat', { user_id })
+  const res = await client.post('/heartbeat', null, { params: { user_id } })
   return res.data
 }
 

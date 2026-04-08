@@ -278,8 +278,8 @@ class Database:
         """获取空气中的所有真菌"""
         fungi = []
         async with self._db.execute(
-            """SELECT fungus_id, dish_id, user_id, content, image_id, status, 
-                      location, unlock_time, parent1_id, parent2_id, created_at 
+            """SELECT fungus_id, dish_id, user_id, content, image_id, status,
+                      location, is_parent, unlock_time, parent1_id, parent2_id, created_at
                FROM fungi WHERE location = 'air'"""
         ) as cursor:
             async for row in cursor:
@@ -291,10 +291,11 @@ class Database:
                     "image_id": row[4],
                     "status": row[5],
                     "location": row[6],
-                    "unlock_time": row[7],
-                    "parent1_id": row[8],
-                    "parent2_id": row[9],
-                    "created_at": row[10]
+                    "is_parent": row[7],
+                    "unlock_time": row[8],
+                    "parent1_id": row[9],
+                    "parent2_id": row[10],
+                    "created_at": row[11]
                 })
         return fungi
     
@@ -339,7 +340,7 @@ class Database:
         parent2_id: str,
         dish_id: Optional[str] = None
     ) -> str:
-        """创建杂交真菌"""
+        """创建杂交真菌（标记为已参与杂交，不再参与后续杂交）"""
         fungus_id = str(uuid.uuid4())
         # 5秒后解锁
         unlock_time = (datetime.now() + timedelta(seconds=5)).isoformat()
@@ -347,10 +348,10 @@ class Database:
         await self._db.execute(
             """INSERT INTO fungi
                (fungus_id, dish_id, user_id, content, image_id, status, location,
-                unlock_time, parent1_id, parent2_id)
-               VALUES (?, ?, ?, ?, ?, 'incubating', ?, ?, ?, ?)""",
+                is_parent, unlock_time, parent1_id, parent2_id)
+               VALUES (?, ?, ?, ?, ?, 'incubating', ?, 1, ?, ?, ?)""",
             (fungus_id, dish_id, user_id, content, image_id,
-             dish_id if dish_id else 'air', unlock_time,
+             'dish' if dish_id else 'air', unlock_time,
              parent1_id, parent2_id)
         )
         await self._db.commit()

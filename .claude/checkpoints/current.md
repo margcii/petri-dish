@@ -149,26 +149,29 @@
 
 ---
 
-### CP3: AI杂交集成 ⏳ 当前
+### CP3: AI杂交集成 ⏳ 当前（调试中）
 **目标**: 接入 SiliconFlow API（DeepSeek-V3.2）实现智能文本杂交
 
 **API配置**:
 - **服务商**: SiliconFlow (硅基流动)
 - **Base URL**: `https://api.siliconflow.cn/v1`
 - **模型**: `deepseek-ai/DeepSeek-V3.2`
-- **文档**: https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions
 
-**验收标准**:
-- [ ] SiliconFlow API 客户端封装（backend/ai_client.py）
-- [ ] 环境变量配置（SILICONFLOW_API_KEY）
-- [ ] CP2.7 杂交结果调用 AI 混合文本
-- [ ] 替换占位杂交文本为真实 AI 生成内容
-- [ ] 错误降级：API 失败时使用简单拼接作为 fallback
+**当前状态**:
+- ✅ API 客户端封装完成 (`backend/ai_client.py`)
+- ✅ 环境变量配置完成
+- ⚠️ AI 杂交调用测试通过，但前端未显示生成内容（需排查）
+- ❌ 杂交机制问题：父母真菌仍可多次嵌套杂交（`is_parent` 过滤未生效）
 
-**技术重点**: 
-- 使用 `openai` 库兼容 SiliconFlow API
-- Prompt 设计：融合两个父真菌文本的核心概念
-- 异步调用避免阻塞 FastAPI 事件循环
+**待修复问题**:
+1. 前端 `Fungus` 类型已添加 `is_parent`，但过滤逻辑仍需验证
+2. `check_new_hybrid` API 返回 422（参数可选修复未生效，需排查缓存/重启问题）
+3. AI 生成结果未正确显示（可能后端保存或前端渲染问题）
+
+**调试记录**:
+- AI 客户端直接测试：调用成功，返回融合文本
+- 后端日志：需添加更多调试输出确认 `trigger_hybrid` 执行路径
+- 前端 Console：`is_parent` 字段值为 `undefined`，类型定义可能未生效
 
 ---
 
