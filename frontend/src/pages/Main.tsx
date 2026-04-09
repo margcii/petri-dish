@@ -26,12 +26,294 @@ const getFungusColor = (imageId: string) => {
   return FUNGUS_COLORS[colorIndex]
 }
 
+// 真菌类型定义
+interface HybridGroup {
+  groupId: string;  // 用父母ID组合作为组ID
+  parents: Fungus[];  // 组内的父母真菌
+  isIncubating: boolean;  // 是否正在孵化
+  hybridResult?: Fungus;  // 杂交结果真菌（包含AI生成的融合文本）
+}
+
+// 将真菌按杂交组分组
+// 参数：
+// - parentFungi: 所有is_parent=true的真菌（将被显示的真菌）
+// - hybridResults: 所有杂交结果真菌（用于确定分组关系，但自身不显示）
+// 规则：
+// 1. 普通父母真菌（不在任何杂交组中的）：单独一组
+// 2. 杂交父母真菌：根据hybridResults的parent1_id/parent2_id分组
+const groupFungiByHybrid = (parentFungi: Fungus[], hybridResults: Fungus[]): HybridGroup[] => {
+  const groups: Map<string, HybridGroup> = new Map()
+  const standaloneFungi: Fungus[] = []
+  const parentFungiMap: Map<string, Fungus> = new Map()
+
+  // 建立父母真菌ID映射
+  for (const fungus of parentFungi) {
+    parentFungiMap.set(fungus.fungus_id, fungus)
+  }
+
+  // 跟踪已被分组的真菌
+  const groupedFungiIds: Set<string> = new Set()
+
+  // 根据杂交结果真菌创建分组（只显示父母，不显示杂交结果本身）
+  for (const result of hybridResults) {
+    const parentIds = [result.parent1_id, result.parent2_id].filter((id): id is string => id !== null).sort()
+    if (parentIds.length === 0) continue
+
+    const groupId = parentIds.join('-')
+    const groupParents: Fungus[] = []
+    let isIncubating = result.status === 'incubating'
+
+    // 查找对应的父母真菌（从parentFungi中找）
+    for (const parentId of parentIds) {
+      const parent = parentFungiMap.get(parentId)
+      if (parent) {
+        groupParents.push(parent)
+        groupedFungiIds.add(parentId)
+      }
+    }
+
+    // 注意：杂交结果真菌本身不加入组（is_parent=false，不显示）
+    // 组内只包含父母真菌
+
+    if (groupParents.length > 0) {
+      // 检查是否已存在相同组
+      if (groups.has(groupId)) {
+        // 合并到现有组
+        const existingGroup = groups.get(groupId)!
+        for (const p of groupParents) {
+          if (!existingGroup.parents.find(ep => ep.fungus_id === p.fungus_id)) {
+            existingGroup.parents.push(p)
+          }
+        }
+        existingGroup.isIncubating = existingGroup.isIncubating || isIncubating
+        // 保存杂交结果（取最新的）
+        if (!existingGroup.hybridResult || result.created_at > existingGroup.hybridResult.created_at) {
+          existingGroup.hybridResult = result
+        }
+      } else {
+        groups.set(groupId, {
+          groupId,
+          parents: groupParents,
+          isIncubating,
+          hybridResult: result  // 保存杂交结果真菌（包含AI文本）
+        })
+      }
+    }
+  }
+
+  // 处理未被分组的普通父母真菌
+  for (const fungus of parentFungi) {
+    if (!groupedFungiIds.has(fungus.fungus_id)) {
+      standaloneFungi.push(fungus)
+    }
+  }
+
+  // 构建最终结果：普通真菌每个单独成组
+  const result: HybridGroup[] = standaloneFungi.map(f => ({
+    groupId: f.fungus_id,
+    parents: [f],
+    isIncubating: false
+  }))
+
+  // 添加杂交组
+  result.push(...groups.values())
+
+  return result
+}
+
+// 渲染杂交组
+// 两个真菌：横向排列，重叠50%
+// 三个真菌：品字形排列，重叠50%
+const renderHybridGroup = (
+  group: HybridGroup,
+  isCtrlPressed: boolean,
+  setSelectedFungus: (f: Fungus) => void,
+  setSelectedHybridGroup: (g: HybridGroup) => void,
+  fallingFungusId: string | null
+) => {
+  const { parents, isIncubating } = group
+  const parentCount = parents.length
+
+  // 单个真菌 - 普通显示
+  if (parentCount === 1) {
+    const fungus = parents[0]
+    const color = getFungusColor(fungus.image_id)
+    const isFalling = fungus.fungus_id === fallingFungusId
+
+    return (
+      <div
+        key={fungus.fungus_id}
+        onClick={() => setSelectedFungus(fungus)}
+        className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-2xl transition-all duration-300 relative cursor-pointer hover:ring-2 hover:ring-white hover:scale-110 ${color.bg} ${isFalling ? 'animate-fall-in' : ''}`}
+        title={fungus.content.slice(0, 50) + (fungus.content.length > 50 ? '...' : '')}
+      >
+        {color.emoji}
+      </div>
+    )
+  }
+
+  // 两个真菌杂交组 - 横向排列，重叠50%
+  if (parentCount === 2) {
+    const [f1, f2] = parents
+    const color1 = getFungusColor(f1.image_id)
+    const color2 = getFungusColor(f2.image_id)
+    const isFalling = f1.fungus_id === fallingFungusId || f2.fungus_id === fallingFungusId
+
+    return (
+      <div
+        key={group.groupId}
+        onClick={(e) => {
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+          const x = e.clientX - rect.left
+          const width = rect.width
+
+          if (isCtrlPressed) {
+            // Ctrl模式：根据点击位置选择不同的真菌
+            if (x < width / 2) {
+              setSelectedFungus(f1)
+            } else {
+              setSelectedFungus(f2)
+            }
+          } else {
+            setSelectedHybridGroup(group)
+          }
+        }}
+        className={`relative w-14 h-10 sm:w-16 sm:h-12 rounded-lg cursor-pointer transition-all duration-300 ${isIncubating ? 'opacity-40 animate-pulse' : 'hover:scale-110'} ${isFalling ? 'animate-fall-in' : ''}`}
+        title={isCtrlPressed ? 'Ctrl模式：点击左/右选择不同真菌' : '点击查看杂交组（2个真菌重叠）'}
+      >
+        {/* 横向排列，重叠50% */}
+        <div className="relative w-full h-full flex items-center justify-center">
+          {/* 真菌1 - 左侧 */}
+          <div
+            className={`absolute left-0 w-7 h-7 sm:w-8 sm:h-8 rounded-md flex items-center justify-center text-sm ${color1.bg} ring-1 ring-white/30 z-10 ${isCtrlPressed ? 'hover:ring-2 hover:ring-blue-400 hover:scale-110 transition-all' : ''}`}
+            title={isCtrlPressed ? f1.content.slice(0, 30) : ''}
+          >
+            {color1.emoji}
+          </div>
+
+          {/* 真菌2 - 右侧，向左重叠50% */}
+          <div
+            className={`absolute left-4 sm:left-5 w-7 h-7 sm:w-8 sm:h-8 rounded-md flex items-center justify-center text-sm ${color2.bg} ring-1 ring-white/30 z-20 ${isCtrlPressed ? 'hover:ring-2 hover:ring-blue-400 hover:scale-110 transition-all' : ''}`}
+            title={isCtrlPressed ? f2.content.slice(0, 30) : ''}
+          >
+            {color2.emoji}
+          </div>
+        </div>
+
+        {/* 孵化标记或杂交标记 */}
+        {isIncubating ? (
+          <span className="absolute top-[-4px] right-[-4px] text-xs">⏳</span>
+        ) : (
+          <span className="absolute top-[-4px] right-[-4px] w-3 h-3 bg-yellow-400 rounded-full text-[8px] flex items-center justify-center">
+            ⚡
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // 三个真菌杂交组 - 品字形排列，重叠50%
+  if (parentCount === 3) {
+    const [f1, f2, f3] = parents
+    const color1 = getFungusColor(f1.image_id)
+    const color2 = getFungusColor(f2.image_id)
+    const color3 = getFungusColor(f3.image_id)
+    const isFalling = f1.fungus_id === fallingFungusId || f2.fungus_id === fallingFungusId || f3.fungus_id === fallingFungusId
+
+    return (
+      <div
+        key={group.groupId}
+        onClick={(e) => {
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+          const x = e.clientX - rect.left
+          const y = e.clientY - rect.top
+          const width = rect.width
+          const height = rect.height
+
+          if (isCtrlPressed) {
+            // Ctrl模式：根据点击位置选择不同的真菌
+            // 品字形区域判断
+            // 上半部分选f1（顶部），左下选f2，右下选f3
+            if (y < height / 2) {
+              setSelectedFungus(f1)  // 顶部真菌
+            } else if (x < width / 2) {
+              setSelectedFungus(f2)  // 左下真菌
+            } else {
+              setSelectedFungus(f3)  // 右下真菌
+            }
+          } else {
+            setSelectedHybridGroup(group)
+          }
+        }}
+        className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg cursor-pointer transition-all duration-300 ${isIncubating ? 'opacity-40 animate-pulse' : 'hover:scale-110'} ${isFalling ? 'animate-fall-in' : ''}`}
+        title={isCtrlPressed ? 'Ctrl模式：点击上/左下/右下选择不同真菌' : '点击查看杂交组（3个真菌重叠）'}
+      >
+        {/* 品字形排列，重叠50% */}
+        <div className="relative w-full h-full">
+          {/* 真菌1 - 顶部 */}
+          <div
+            className={`absolute top-0 left-1/2 -translate-x-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-md flex items-center justify-center text-sm ${color1.bg} ring-1 ring-white/30 z-10 ${isCtrlPressed ? 'hover:ring-2 hover:ring-blue-400 hover:scale-110 transition-all' : ''}`}
+            title={isCtrlPressed ? f1.content.slice(0, 30) : ''}
+          >
+            {color1.emoji}
+          </div>
+
+          {/* 真菌2 - 左下 */}
+          <div
+            className={`absolute bottom-1 left-1 w-6 h-6 sm:w-7 sm:h-7 rounded-md flex items-center justify-center text-sm ${color2.bg} ring-1 ring-white/30 z-20 ${isCtrlPressed ? 'hover:ring-2 hover:ring-blue-400 hover:scale-110 transition-all' : ''}`}
+            title={isCtrlPressed ? f2.content.slice(0, 30) : ''}
+          >
+            {color2.emoji}
+          </div>
+
+          {/* 真菌3 - 右下，向左上重叠 */}
+          <div
+            className={`absolute bottom-1 right-1 w-6 h-6 sm:w-7 sm:h-7 rounded-md flex items-center justify-center text-sm ${color3.bg} ring-1 ring-white/30 z-30 ${isCtrlPressed ? 'hover:ring-2 hover:ring-blue-400 hover:scale-110 transition-all' : ''}`}
+            title={isCtrlPressed ? f3.content.slice(0, 30) : ''}
+          >
+            {color3.emoji}
+          </div>
+        </div>
+
+        {/* 孵化标记或杂交标记 */}
+        {isIncubating ? (
+          <span className="absolute top-[-4px] right-[-4px] text-xs">⏳</span>
+        ) : (
+          <span className="absolute top-[-4px] right-[-4px] w-3 h-3 bg-yellow-400 rounded-full text-[8px] flex items-center justify-center">
+            ⚡
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // 超过3个的情况 - 简化显示
+  return (
+    <div
+      key={group.groupId}
+      onClick={() => setSelectedHybridGroup(group)}
+      className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg cursor-pointer transition-all duration-300 ${isCtrlPressed ? 'ring-2 ring-yellow-400' : ''} ${isIncubating ? 'opacity-40 animate-pulse' : 'hover:scale-110'}`}
+      title={`杂交组 (${parentCount}个真菌)`}
+    >
+      <div className={`w-full h-full rounded-lg flex items-center justify-center bg-slate-700 ring-1 ring-white/30`}>
+        <span className="text-lg">{parentCount}x</span>
+      </div>
+      {isIncubating ? (
+        <span className="absolute top-[-4px] right-[-4px] text-xs">⏳</span>
+      ) : (
+        <span className="absolute top-[-4px] right-[-4px] w-3 h-3 bg-yellow-400 rounded-full text-[8px] flex items-center justify-center">
+          ⚡
+        </span>
+      )}
+    </div>
+  )
+}
+
 function Main() {
   const navigate = useNavigate()
   const [user, setUser] = useState<User | null>(null)
   const [dishes, setDishes] = useState<Dish[]>([])
   const [activeDishIndex, setActiveDishIndex] = useState(0)
-  const [activeDishFungi, setActiveDishFungi] = useState<Fungus[]>([])
   const [isLoadingFungi, setIsLoadingFungi] = useState(false)
   const [text, setText] = useState('')
   const [selectedColor, setSelectedColor] = useState(FUNGUS_COLORS[0])
@@ -40,6 +322,7 @@ function Main() {
   const [newDishName, setNewDishName] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [selectedFungus, setSelectedFungus] = useState<Fungus | null>(null)
+  const [selectedHybridGroup, setSelectedHybridGroup] = useState<HybridGroup | null>(null)
   const [isCtrlPressed, setIsCtrlPressed] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [lastHybridCheck, setLastHybridCheck] = useState<string | null>(null)
@@ -47,6 +330,12 @@ function Main() {
   const [isDistributing, setIsDistributing] = useState(false)
   const [distributeMessage, setDistributeMessage] = useState<string | null>(null)
   const [isDishFullError, setIsDishFullError] = useState(false)
+  const [fallingFungusId, setFallingFungusId] = useState<string | null>(null)
+  const [selectedDishIndex, setSelectedDishIndex] = useState<number | null>(null)
+  const dishListRef = useRef<HTMLDivElement>(null)
+
+  // 杂交组数据（只包含父母真菌）
+  const [hybridGroups, setHybridGroups] = useState<HybridGroup[]>([])
 
   // Ctrl 键检测
   useEffect(() => {
@@ -167,19 +456,25 @@ function Main() {
   // 加载活跃培养皿的真菌数据
   const fetchActiveDishFungi = async () => {
     if (!activeDish) {
-      setActiveDishFungi([])
+      setHybridGroups([])
       return
     }
     setIsLoadingFungi(true)
     try {
       const dishDetail = await getDish(activeDish.dish_id)
-      // 显示所有真菌，但父母真菌（没有parent_id的is_parent真菌）用特殊样式标记
-      const displayFungi = (dishDetail.fungi || []).filter((f: Fungus) => {
-        // 隐藏纯父母真菌（is_parent=true 且没有 parent1_id）
-        // 显示杂交结果真菌（有 parent1_id）和普通真菌
-        return !f.is_parent || f.parent1_id
-      })
-      setActiveDishFungi(displayFungi)
+      const allFungi = dishDetail.fungi || []
+
+      // 修正：显示所有真菌
+      // - 未杂交的真菌：单独显示
+      // - 已杂交的父母真菌：按组重叠显示
+      // - 杂交结果真菌（is_parent=false）：不直接显示，只用于确定分组
+
+      const hybridResults = allFungi.filter((f: Fungus) => f.parent1_id)
+      const displayableFungi = allFungi.filter((f: Fungus) => !f.parent1_id) // 排除杂交结果本身
+
+      // 按杂交组分组
+      const groups = groupFungiByHybrid(displayableFungi, hybridResults)
+      setHybridGroups(groups)
     } catch (err) {
       console.error('加载真菌失败:', err)
     } finally {
@@ -214,9 +509,12 @@ function Main() {
         // 重新获取更新后的数据
         const updatedDishDetail = await getDish(activeDish.dish_id)
         const updatedFungi = updatedDishDetail.fungi || []
-        // 显示杂交结果真菌，隐藏纯父母真菌
-        const displayFungi = updatedFungi.filter((f: Fungus) => !f.is_parent || f.parent1_id)
-        setActiveDishFungi(displayFungi)
+        // 修正：显示所有真菌（排除杂交结果本身）
+        const hybridResults = updatedFungi.filter((f: Fungus) => f.parent1_id)
+        const displayableFungi = updatedFungi.filter((f: Fungus) => !f.parent1_id)
+        // 按杂交组分组
+        const groups = groupFungiByHybrid(displayableFungi, hybridResults)
+        setHybridGroups(groups)
 
         // 自动杂交检测：只选择非亲本的idle真菌（所有is_parent=true的都不参与）
         const idleFungi = updatedFungi.filter((f: Fungus) => f.status === 'idle' && !f.is_parent)
@@ -343,6 +641,14 @@ function Main() {
     try {
       const result: DistributeAirResponse = await distributeAir(activeDish.dish_id, user.user_id)
       setDistributeMessage(result.message)
+
+      // 设置落入动画状态
+      if (result.data?.fungus_id) {
+        setFallingFungusId(result.data.fungus_id)
+        // 动画持续1秒后清除
+        setTimeout(() => setFallingFungusId(null), 1000)
+      }
+
       // 3秒后清除消息
       setTimeout(() => setDistributeMessage(null), 3000)
       // 刷新空气区和活跃培养皿
@@ -360,8 +666,8 @@ function Main() {
   const handleAddToActiveDish = async () => {
     if (!text.trim() || !user || !activeDish) return
 
-    // 检查容量限制
-    if (activeDishFungi.length >= 10) {
+    // 检查容量限制（按组计算，每组占用1个位置）
+    if (hybridGroups.length >= 10) {
       setIsDishFullError(true)
       setTimeout(() => setIsDishFullError(false), 3000)
       return
@@ -392,44 +698,84 @@ function Main() {
     }
   }
 
-  // 渲染单个真菌
-  const renderFungus = (fungus: Fungus) => {
-    const color = getFungusColor(fungus.image_id)
-    const baseClasses = 'w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-2xl transition-all duration-300 relative'
+  // 处理放入选中的培养皿
+  const handleAddToSelectedDish = async (dishIndex: number) => {
+    if (!text.trim() || !user) return
 
-    // 孵化状态：半透明闪烁，但可点击查看
-    if (fungus.status === 'incubating') {
+    const targetDish = dishes[dishIndex]
+    if (!targetDish) return
+
+    // 获取目标培养皿的真菌数量
+    try {
+      const dishDetail = await getDish(targetDish.dish_id)
+      // 只计算父母真菌的数量
+      const targetFungiCount = (dishDetail.fungi || []).filter(
+        (f: Fungus) => f.is_parent
+      ).length
+
+      // 检查容量限制
+      if (targetFungiCount >= 10) {
+        setIsDishFullError(true)
+        setTimeout(() => setIsDishFullError(false), 3000)
+        return
+      }
+
+      setIsUploading(true)
+      await uploadFungus({
+        user_id: user.user_id,
+        content: text.trim(),
+        dish_id: targetDish.dish_id,
+        image_id: selectedColor.id
+      })
+      setText('')
+      await fetchActiveDishFungi()
+      setIsDropdownOpen(false)
+      setSelectedDishIndex(null)
+    } catch (err) {
+      console.error('上传真菌失败:', err)
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  // 处理滚轮滑动选择
+  const handleDishScroll = () => {
+    if (!dishListRef.current) return
+    const container = dishListRef.current
+    const scrollLeft = container.scrollLeft
+    const itemWidth = 140 // 每个卡片宽度 + gap
+    const newIndex = Math.round(scrollLeft / itemWidth)
+    if (newIndex >= 0 && newIndex < dishes.length) {
+      setSelectedDishIndex(newIndex)
+    }
+  }
+
+  // 渲染真菌展示区域
+  // 按杂交组渲染，每组占用一个格子
+  const renderFungusGrid = () => {
+    if (isLoadingFungi) {
       return (
-        <div
-          key={fungus.fungus_id}
-          onClick={() => setSelectedFungus(fungus)}
-          className={`${baseClasses} ${color.bg} opacity-40 animate-pulse cursor-pointer hover:ring-2 hover:ring-white`}
-          title="孵化中... (点击查看)"
-        >
-          {color.emoji}
-          <span className="absolute -top-1 -right-1 text-xs">⏳</span>
+        <div className="col-span-full text-center py-4 text-slate-400">
+          加载中...
         </div>
       )
     }
 
-    // 杂交结果真菌：检查是否有 parent1_id/parent2_id
-    const isHybridResult = fungus.parent1_id && fungus.parent2_id
-
     return (
-      <div
-        key={fungus.fungus_id}
-        onClick={() => !isCtrlPressed && setSelectedFungus(fungus)}
-        className={`${baseClasses} ${color.bg} hover:ring-2 hover:ring-white hover:scale-110 ${isCtrlPressed && isHybridResult ? 'ring-2 ring-yellow-400' : 'cursor-pointer'}`}
-        title={isCtrlPressed && isHybridResult ? 'Ctrl+点击查看杂交结果' : `${fungus.content.slice(0, 50)}${fungus.content.length > 50 ? '...' : ''}`}
-      >
-        {color.emoji}
-        {/* Ctrl+悬停时显示杂交标记 */}
-        {isHybridResult && (
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full text-[8px] flex items-center justify-center">
-            ⚡
-          </span>
+      <>
+        {hybridGroups.slice(0, 10).map((group) =>
+          renderHybridGroup(group, isCtrlPressed, setSelectedFungus, setSelectedHybridGroup, fallingFungusId)
         )}
-      </div>
+        {/* 空位占位 */}
+        {Array.from({ length: Math.max(0, 10 - hybridGroups.length) }).map((_, index) => (
+          <div
+            key={`empty-${index}`}
+            className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg border-2 border-dashed border-slate-600/50 flex items-center justify-center"
+          >
+            <span className="text-slate-600 text-xs">{hybridGroups.length + index + 1}</span>
+          </div>
+        ))}
+      </>
     )
   }
 
@@ -477,26 +823,7 @@ function Main() {
               </div>
             ) : (
               <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 sm:gap-3">
-                {isLoadingFungi ? (
-                  <div className="col-span-full text-center py-4 text-slate-400">
-                    加载中...
-                  </div>
-                ) : (
-                  <>
-                    {activeDishFungi.slice(0, 10).map((fungus) => (
-                      renderFungus(fungus)
-                    ))}
-                    {/* 空位占位 */}
-                    {Array.from({ length: Math.max(0, 10 - activeDishFungi.length) }).map((_, index) => (
-                      <div
-                        key={`empty-${index}`}
-                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg border-2 border-dashed border-slate-600/50 flex items-center justify-center"
-                      >
-                        <span className="text-slate-600 text-xs">{activeDishFungi.length + index + 1}</span>
-                      </div>
-                    ))}
-                  </>
-                )}
+                {renderFungusGrid()}
               </div>
             )}
           </div>
@@ -566,8 +893,8 @@ function Main() {
             />
             <div className="flex justify-between mt-2 text-sm text-slate-500">
               <span>{text.length}/500</span>
-              <span className={activeDishFungi.length >= 10 ? 'text-red-400 font-semibold' : ''}>
-                {activeDishFungi.length}/10 真菌
+              <span className={hybridGroups.length >= 10 ? 'text-red-400 font-semibold' : ''}>
+                {hybridGroups.length}/10 真菌
               </span>
             </div>
             {/* 满员错误提示 */}
@@ -597,7 +924,22 @@ function Main() {
             {/* 放入培养皿按钮（带下拉） */}
             <div className="relative" ref={dropdownRef}>
               <button
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                onClick={() => {
+                  setIsDropdownOpen(!isDropdownOpen)
+                  if (!isDropdownOpen) {
+                    // 打开时初始化选中状态为活跃培养皿
+                    setSelectedDishIndex(activeDishIndex)
+                    // 滚动到活跃培养皿位置
+                    setTimeout(() => {
+                      if (dishListRef.current && activeDishIndex >= 0) {
+                        dishListRef.current.scrollTo({
+                          left: activeDishIndex * 140,
+                          behavior: 'smooth'
+                        })
+                      }
+                    }, 100)
+                  }
+                }}
                 className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium rounded-xl transition-all flex items-center gap-2"
               >
                 <span>🧫</span>
@@ -614,7 +956,7 @@ function Main() {
 
               {/* 下拉菜单 */}
               {isDropdownOpen && (
-                <div className="absolute top-full left-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20">
+                <div className="absolute top-full left-0 mt-2 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20">
                   {/* 活跃培养皿选项 */}
                   <div className="p-2">
                     <button
@@ -652,26 +994,60 @@ function Main() {
                   {/* 分隔线 */}
                   <div className="border-t border-slate-700"></div>
 
-                  {/* 培养皿库列表 */}
-                  <div className="p-2 max-h-40 overflow-y-auto">
-                    <p className="text-slate-500 text-xs px-2 mb-2">培养皿库</p>
+                  {/* 培养皿库列表 - 滚轮切换 */}
+                  <div className="p-2">
+                    <p className="text-slate-500 text-xs px-2 mb-2">培养皿库（滑动选择）</p>
                     {dishes.length === 0 ? (
                       <p className="text-slate-500 text-sm px-2 py-2">暂无培养皿</p>
                     ) : (
-                      dishes.map((dish, index) => (
-                        <button
-                          key={dish.dish_id}
-                          className={`w-full px-3 py-2 text-left text-slate-300 hover:bg-slate-700/50 rounded-lg flex items-center gap-2 transition-colors ${
-                            index === activeDishIndex ? 'bg-slate-700/30' : ''
-                          }`}
+                      <>
+                        {/* 横向滚轮列表 */}
+                        <div
+                          ref={dishListRef}
+                          onScroll={handleDishScroll}
+                          className="flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 scrollbar-thin"
+                          style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 #1e293b' }}
                         >
-                          <span>🧫</span>
-                          <span className="flex-1 truncate">{dish.name}</span>
-                          {index === activeDishIndex && (
-                            <span className="text-xs text-emerald-400">活跃</span>
-                          )}
-                        </button>
-                      ))
+                          {dishes.map((dish, index) => (
+                            <div
+                              key={dish.dish_id}
+                              className={`snap-center flex-shrink-0 w-[130px] p-3 rounded-lg border transition-all cursor-pointer ${
+                                selectedDishIndex === index
+                                  ? 'bg-emerald-600/30 border-emerald-500/50 ring-2 ring-emerald-400'
+                                  : index === activeDishIndex
+                                    ? 'bg-slate-700/30 border-slate-600'
+                                    : 'bg-slate-700/20 border-slate-600/50 hover:bg-slate-700/40'
+                              }`}
+                              onClick={() => setSelectedDishIndex(index)}
+                            >
+                              <div className="text-center">
+                                <span className="text-2xl">🧫</span>
+                                <p className={`text-sm truncate mt-1 ${
+                                  selectedDishIndex === index ? 'text-emerald-300' : 'text-slate-300'
+                                }`}>
+                                  {dish.name}
+                                </p>
+                                {index === activeDishIndex && (
+                                  <span className="text-xs text-emerald-400 mt-1">活跃</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* 放入选中培养皿按钮 */}
+                        {selectedDishIndex !== null && selectedDishIndex !== activeDishIndex && dishes[selectedDishIndex] && (
+                          <button
+                            onClick={() => handleAddToSelectedDish(selectedDishIndex)}
+                            disabled={!text.trim() || isUploading}
+                            className="w-full mt-3 px-3 py-2 text-white bg-emerald-600/40 border border-emerald-500/40 rounded-lg flex items-center justify-center gap-2 hover:bg-emerald-600/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span>📤</span>
+                            <span className="truncate">放入 {dishes[selectedDishIndex].name}</span>
+                            {isUploading && <span className="animate-spin">⏳</span>}
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -761,75 +1137,240 @@ function Main() {
 
       {/* 真菌详情弹窗 */}
       {selectedFungus && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setSelectedFungus(null)}
-        >
-          <div
-            className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
+        <FungusDetailModal
+          fungus={selectedFungus}
+          onClose={() => setSelectedFungus(null)}
+        />
+      )}
+
+      {/* 杂交组详情弹窗 */}
+      {selectedHybridGroup && (
+        <HybridGroupDetailModal
+          group={selectedHybridGroup}
+          onClose={() => setSelectedHybridGroup(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// 真菌详情弹窗组件 - 现在只显示单个真菌（可能是杂交父母）
+function FungusDetailModal({
+  fungus,
+  onClose
+}: {
+  fungus: Fungus
+  onClose: () => void
+}) {
+  const color = getFungusColor(fungus.image_id)
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <div className={`w-16 h-16 rounded-xl ${color.bg} flex items-center justify-center`}>
+              <span className="text-3xl">{color.emoji}</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">真菌详情</h3>
+              <p className="text-slate-400 text-sm">
+                状态: <span className={fungus.status === 'idle' ? 'text-emerald-400' : 'text-amber-400'}>
+                  {fungus.status === 'idle' ? '活跃' : fungus.status}
+                </span>
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white transition-colors p-1"
           >
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex items-center gap-4">
-                <div className={`w-16 h-16 rounded-xl ${getFungusColor(selectedFungus.image_id).bg} flex items-center justify-center`}>
-                  <span className="text-3xl">{getFungusColor(selectedFungus.image_id).emoji}</span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-white">真菌详情</h3>
-                  <p className="text-slate-400 text-sm">
-                    状态: <span className={selectedFungus.status === 'idle' ? 'text-emerald-400' : 'text-amber-400'}>
-                      {selectedFungus.status === 'idle' ? '活跃' : selectedFungus.status}
-                    </span>
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedFungus(null)}
-                className="text-slate-400 hover:text-white transition-colors p-1"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {/* 文本内容 */}
+          <div className="bg-slate-700/50 rounded-xl p-4">
+            <p className="text-slate-400 text-xs mb-2">内容</p>
+            <p className="text-white whitespace-pre-wrap">{fungus.content}</p>
+          </div>
+
+          {/* 信息列表 */}
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between py-2 border-b border-slate-700/50">
+              <span className="text-slate-400">真菌 ID</span>
+              <span className="text-slate-300 font-mono">{fungus.fungus_id}</span>
             </div>
-
-            <div className="space-y-4">
-              {/* 文本内容 */}
-              <div className="bg-slate-700/50 rounded-xl p-4">
-                <p className="text-slate-400 text-xs mb-2">内容</p>
-                <p className="text-white whitespace-pre-wrap">{selectedFungus.content}</p>
-              </div>
-
-              {/* 信息列表 */}
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between py-2 border-b border-slate-700/50">
-                  <span className="text-slate-400">真菌 ID</span>
-                  <span className="text-slate-300 font-mono">{selectedFungus.fungus_id}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-700/50">
-                  <span className="text-slate-400">图片 ID</span>
-                  <span className="text-slate-300 font-mono">{selectedFungus.image_id}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-700/50">
-                  <span className="text-slate-400">创建者 ID</span>
-                  <span className="text-slate-300 font-mono">{selectedFungus.user_id.slice(0, 16)}...</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-700/50">
-                  <span className="text-slate-400">创建时间</span>
-                  <span className="text-slate-300">{new Date(selectedFungus.created_at).toLocaleString()}</span>
-                </div>
-              </div>
+            <div className="flex justify-between py-2 border-b border-slate-700/50">
+              <span className="text-slate-400">颜色 ID</span>
+              <span className="text-slate-300 font-mono">{fungus.image_id}</span>
             </div>
-
-            <button
-              onClick={() => setSelectedFungus(null)}
-              className="w-full mt-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-colors"
-            >
-              关闭
-            </button>
+            <div className="flex justify-between py-2 border-b border-slate-700/50">
+              <span className="text-slate-400">创建者 ID</span>
+              <span className="text-slate-300 font-mono">{fungus.user_id.slice(0, 16)}...</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-slate-700/50">
+              <span className="text-slate-400">创建时间</span>
+              <span className="text-slate-300">{new Date(fungus.created_at).toLocaleString()}</span>
+            </div>
           </div>
         </div>
-      )}
+
+        <button
+          onClick={onClose}
+          className="w-full mt-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-colors"
+        >
+          关闭
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// 杂交组详情弹窗组件
+function HybridGroupDetailModal({
+  group,
+  onClose
+}: {
+  group: HybridGroup
+  onClose: () => void
+}) {
+  const { parents, isIncubating } = group
+  const parentCount = parents.length
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <div className="relative w-16 h-16">
+              {parentCount === 2 ? (
+                // 两个真菌：横向排列
+                <>
+                  <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg ${getFungusColor(parents[0].image_id).bg} flex items-center justify-center ring-1 ring-white/30`}>
+                    <span className="text-lg">{getFungusColor(parents[0].image_id).emoji}</span>
+                  </div>
+                  <div className={`absolute left-5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg ${getFungusColor(parents[1].image_id).bg} flex items-center justify-center ring-1 ring-white/30`}>
+                    <span className="text-lg">{getFungusColor(parents[1].image_id).emoji}</span>
+                  </div>
+                </>
+              ) : parentCount === 3 ? (
+                // 三个真菌：品字形
+                <>
+                  <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-7 h-7 rounded-lg ${getFungusColor(parents[0].image_id).bg} flex items-center justify-center ring-1 ring-white/30`}>
+                    <span className="text-base">{getFungusColor(parents[0].image_id).emoji}</span>
+                  </div>
+                  <div className={`absolute bottom-1 left-1 w-7 h-7 rounded-lg ${getFungusColor(parents[1].image_id).bg} flex items-center justify-center ring-1 ring-white/30`}>
+                    <span className="text-base">{getFungusColor(parents[1].image_id).emoji}</span>
+                  </div>
+                  <div className={`absolute bottom-1 right-1 w-7 h-7 rounded-lg ${getFungusColor(parents[2].image_id).bg} flex items-center justify-center ring-1 ring-white/30`}>
+                    <span className="text-base">{getFungusColor(parents[2].image_id).emoji}</span>
+                  </div>
+                </>
+              ) : (
+                // 单个或更多：显示数量
+                <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center">
+                  <span className="text-2xl">{parentCount}x</span>
+                </div>
+              )}
+              {isIncubating ? (
+                <span className="absolute top-[-2px] right-[-2px] text-sm">⏳</span>
+              ) : (
+                <span className="absolute top-[-2px] right-[-2px] w-4 h-4 bg-yellow-400 rounded-full text-[10px] flex items-center justify-center">
+                  ⚡
+                </span>
+              )}
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">
+                {parentCount === 2 ? '双真菌杂交组' : parentCount === 3 ? '三真菌杂交组' : `杂交组 (${parentCount}个)`}
+              </h3>
+              <p className="text-slate-400 text-sm">
+                状态: <span className={isIncubating ? 'text-amber-400' : 'text-emerald-400'}>
+                  {isIncubating ? '孵化中' : '已完成'}
+                </span>
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white transition-colors p-1"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {/* 杂交结果（AI生成的融合文本）*/}
+          {group.hybridResult && (
+            <div className="bg-gradient-to-r from-emerald-900/50 to-blue-900/50 rounded-xl p-4 border border-emerald-500/30">
+              <p className="text-emerald-400 text-xs mb-2 flex items-center gap-1">
+                <span>⚡</span> 杂交结果（AI融合文本）
+              </p>
+              <p className="text-white text-sm leading-relaxed">
+                {group.hybridResult.content}
+              </p>
+            </div>
+          )}
+
+          {/* 组内真菌列表 */}
+          <div className="bg-slate-700/30 rounded-xl p-4">
+            <p className="text-slate-400 text-xs mb-3">组内真菌（父母）</p>
+            <div className="space-y-3">
+              {parents.map((fungus, index) => {
+                const color = getFungusColor(fungus.image_id)
+                return (
+                  <div key={fungus.fungus_id} className="flex items-start gap-3 bg-slate-700/50 rounded-lg p-3">
+                    <div className={`w-10 h-10 rounded-lg ${color.bg} flex items-center justify-center flex-shrink-0`}>
+                      <span className="text-xl">{color.emoji}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium">真菌 #{index + 1}</p>
+                      <p className="text-slate-400 text-xs truncate">{fungus.content.slice(0, 60)}{fungus.content.length > 60 ? '...' : ''}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 统计信息 */}
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between py-2 border-b border-slate-700/50">
+              <span className="text-slate-400">真菌数量</span>
+              <span className="text-slate-300">{parentCount} 个</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-slate-700/50">
+              <span className="text-slate-400">组 ID</span>
+              <span className="text-slate-300 font-mono text-xs">{group.groupId.slice(0, 16)}...</span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full mt-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-colors"
+        >
+          关闭
+        </button>
+      </div>
     </div>
   )
 }
