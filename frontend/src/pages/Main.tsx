@@ -1001,52 +1001,57 @@ function Main() {
                       <p className="text-slate-500 text-sm px-2 py-2">暂无培养皿</p>
                     ) : (
                       <>
-                        {/* 横向滚轮列表 */}
+                        {/* 横向滚轮列表 - 支持鼠标滚轮滚动 */}
                         <div
                           ref={dishListRef}
-                          onScroll={handleDishScroll}
-                          className="flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 scrollbar-thin"
+                          onWheel={(e) => {
+                            // 阻止默认垂直滚动，改为水平滚动
+                            e.preventDefault()
+                            if (dishListRef.current) {
+                              dishListRef.current.scrollLeft += e.deltaY
+                            }
+                          }}
+                          className="flex gap-3 overflow-x-auto scroll-smooth pb-2 scrollbar-thin"
                           style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 #1e293b' }}
                         >
                           {dishes.map((dish, index) => (
                             <div
                               key={dish.dish_id}
-                              className={`snap-center flex-shrink-0 w-[130px] p-3 rounded-lg border transition-all cursor-pointer ${
-                                selectedDishIndex === index
-                                  ? 'bg-emerald-600/30 border-emerald-500/50 ring-2 ring-emerald-400'
-                                  : index === activeDishIndex
-                                    ? 'bg-slate-700/30 border-slate-600'
-                                    : 'bg-slate-700/20 border-slate-600/50 hover:bg-slate-700/40'
+                              className={`flex-shrink-0 w-[130px] p-3 rounded-lg border transition-all cursor-pointer ${
+                                index === activeDishIndex
+                                  ? 'bg-emerald-600/30 border-emerald-500/50'
+                                  : 'bg-slate-700/20 border-slate-600/50 hover:bg-slate-700/40'
                               }`}
-                              onClick={() => setSelectedDishIndex(index)}
+                              onClick={() => {
+                                // 点击直接放入（非活跃培养皿）
+                                if (index !== activeDishIndex) {
+                                  handleAddToSelectedDish(index)
+                                }
+                                // 关闭下拉菜单
+                                setIsDropdownOpen(false)
+                              }}
                             >
                               <div className="text-center">
                                 <span className="text-2xl">🧫</span>
                                 <p className={`text-sm truncate mt-1 ${
-                                  selectedDishIndex === index ? 'text-emerald-300' : 'text-slate-300'
+                                  index === activeDishIndex ? 'text-emerald-300' : 'text-slate-300'
                                 }`}>
                                   {dish.name}
                                 </p>
-                                {index === activeDishIndex && (
+                                {index === activeDishIndex ? (
                                   <span className="text-xs text-emerald-400 mt-1">活跃</span>
+                                ) : (
+                                  <span className="text-xs text-slate-500 mt-1">点击放入</span>
                                 )}
                               </div>
                             </div>
                           ))}
                         </div>
 
-                        {/* 放入选中培养皿按钮 */}
-                        {selectedDishIndex !== null && selectedDishIndex !== activeDishIndex && dishes[selectedDishIndex] && (
-                          <button
-                            onClick={() => handleAddToSelectedDish(selectedDishIndex)}
-                            disabled={!text.trim() || isUploading}
-                            className="w-full mt-3 px-3 py-2 text-white bg-emerald-600/40 border border-emerald-500/40 rounded-lg flex items-center justify-center gap-2 hover:bg-emerald-600/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span>📤</span>
-                            <span className="truncate">放入 {dishes[selectedDishIndex].name}</span>
-                            {isUploading && <span className="animate-spin">⏳</span>}
-                          </button>
-                        )}
+                        {/* 提示文字 */}
+                        <p className="text-xs text-slate-500 mt-2 text-center">
+                          鼠标滚轮滚动查看 · 点击非活跃培养皿直接放入
+                        </p>
                       </>
                     )}
                   </div>
