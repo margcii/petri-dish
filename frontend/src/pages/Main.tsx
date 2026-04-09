@@ -334,6 +334,27 @@ function Main() {
   const [selectedDishIndex, setSelectedDishIndex] = useState<number | null>(null)
   const dishListRef = useRef<HTMLDivElement>(null)
 
+  // 培养皿列表滚轮事件处理（使用原生事件以支持 preventDefault）
+  useEffect(() => {
+    const element = dishListRef.current
+    if (!element) return
+
+    const handleWheel = (e: WheelEvent) => {
+      // 阻止默认滚动行为和冒泡
+      e.preventDefault()
+      e.stopPropagation()
+      // 水平滚动
+      element.scrollLeft += e.deltaY
+    }
+
+    // 添加非 passive 事件监听器
+    element.addEventListener('wheel', handleWheel, { passive: false })
+
+    return () => {
+      element.removeEventListener('wheel', handleWheel)
+    }
+  }, [isDropdownOpen]) // 下拉菜单打开时才绑定
+
   // 杂交组数据（只包含父母真菌）
   const [hybridGroups, setHybridGroups] = useState<HybridGroup[]>([])
 
@@ -1001,19 +1022,16 @@ function Main() {
                       <p className="text-slate-500 text-sm px-2 py-2">暂无培养皿</p>
                     ) : (
                       <>
-                        {/* 横向滚轮列表 - 支持鼠标滚轮滚动 */}
-                        <div
-                          ref={dishListRef}
-                          onWheel={(e) => {
-                            // 阻止默认垂直滚动，改为水平滚动
-                            e.preventDefault()
-                            if (dishListRef.current) {
-                              dishListRef.current.scrollLeft += e.deltaY
-                            }
-                          }}
-                          className="flex gap-3 overflow-x-auto scroll-smooth pb-2 scrollbar-thin"
-                          style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 #1e293b' }}
-                        >
+                        {/* 横向滚轮列表 - 支持鼠标滚轮滚动（完全隐藏滚动条） */}
+                        <div className="relative">
+                          <div
+                            ref={dishListRef}
+                            className="flex gap-3 overflow-x-scroll scroll-smooth pb-2 [&::-webkit-scrollbar]:hidden"
+                            style={{
+                              scrollbarWidth: 'none',
+                              msOverflowStyle: 'none',
+                            }}
+                          >
                           {dishes.map((dish, index) => (
                             <div
                               key={dish.dish_id}
@@ -1046,6 +1064,7 @@ function Main() {
                               </div>
                             </div>
                           ))}
+                        </div>
                         </div>
 
                         {/* 提示文字 */}
