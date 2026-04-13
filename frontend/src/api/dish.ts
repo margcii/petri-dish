@@ -28,6 +28,8 @@ export interface Fungus {
   unlock_time: string | null
   parent1_id: string | null
   parent2_id: string | null
+  parent1_image_id?: string | null  // 父母真菌的颜色样式ID
+  parent2_image_id?: string | null  // 父母真菌的颜色样式ID
   created_at: string
 }
 

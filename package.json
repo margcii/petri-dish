@@ -1,5 +1,7 @@
 {
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "better-sqlite3": "^12.8.0",
     "playwright": "^1.59.1"
   }
 }

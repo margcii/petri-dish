@@ -71,6 +71,8 @@ class FungusResponse(BaseModel):
     unlock_time: Optional[str] = None
     parent1_id: Optional[str] = None
     parent2_id: Optional[str] = None
+    parent1_image_id: Optional[str] = None  # 父母真菌的颜色样式ID
+    parent2_image_id: Optional[str] = None  # 父母真菌的颜色样式ID
     created_at: Optional[str] = None
 
 

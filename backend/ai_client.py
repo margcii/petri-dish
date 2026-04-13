@@ -1,5 +1,5 @@
 """
-AI 客户端模块 - 使用 SiliconFlow API 进行文本杂交
+AI 客户端模块 - 使用 DeepSeek 官方 API 进行文本杂交
 """
 
 import os
@@ -13,8 +13,8 @@ def get_client() -> AsyncOpenAI:
     """获取或初始化 OpenAI 客户端"""
     global _client
     if _client is None:
-        api_key = os.getenv("SILICONFLOW_API_KEY")
-        base_url = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
         print(f"[AI客户端] 初始化: base_url={base_url}, api_key={'已设置' if api_key else '未设置'}")
         _client = AsyncOpenAI(
             api_key=api_key,
@@ -24,7 +24,7 @@ def get_client() -> AsyncOpenAI:
 
 
 # 模型名称
-MODEL = os.getenv("SILICONFLOW_MODEL", "deepseek-ai/DeepSeek-V3.2")
+MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
 
 async def hybrid_text(content1: str, content2: str) -> str | None:

@@ -30,3 +30,12 @@ export const storeUser = (user: User): void => {
 export const clearUser = (): void => {
   localStorage.removeItem('petri_user')
 }
+
+export const getUserName = async (userId: string): Promise<string> => {
+  try {
+    const res = await client.get(`/user/${userId}`)
+    return res.data.name
+  } catch {
+    return userId.slice(0, 8)
+  }
+}

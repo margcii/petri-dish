@@ -38,35 +38,34 @@ function Welcome() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      {/* 背景装饰 - 真菌菌落效果 */}
+    <div className="min-h-screen bg-black flex items-center justify-center p-4">
+      {/* 背景装饰 - 像素风格淡化 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-20 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
-        <div className="absolute top-1/2 left-1/3 w-48 h-48 bg-cyan-500/5 rounded-full blur-2xl animate-pulse delay-500" />
+        <div className="absolute top-20 left-20 w-64 h-64 bg-gray-800/10" />
+        <div className="absolute bottom-20 right-20 w-96 h-96 bg-gray-700/10" />
+        <div className="absolute top-1/2 left-1/3 w-48 h-48 bg-gray-800/5" />
       </div>
 
       <div className="relative z-10 max-w-md w-full">
         {/* 培养皿图标 */}
         <div className="flex justify-center mb-8">
           <div className="relative">
-            <div className="w-24 h-24 rounded-full border-4 border-emerald-400/30 flex items-center justify-center bg-slate-800/50 backdrop-blur-sm">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400/20 to-teal-500/20 flex items-center justify-center">
-                <span className="text-4xl">🧫</span>
-              </div>
+            <div className="w-24 h-24 border-2 border-gray-700 flex items-center justify-center bg-black">
+              <img
+                src="/petridish.png"
+                alt="Petri Dish"
+                className="w-16 h-16 object-contain"
+              />
             </div>
-            {/* 菌丝装饰 */}
-            <div className="absolute -top-2 -right-2 w-4 h-4 bg-emerald-400/40 rounded-full blur-sm" />
-            <div className="absolute -bottom-1 -left-3 w-3 h-3 bg-teal-400/40 rounded-full blur-sm" />
           </div>
         </div>
 
         {/* 标题 */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">
+          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight font-pixel">
             Petri Dish
           </h1>
-          <p className="text-slate-400 text-lg">
+          <p className="text-gray-500 text-lg font-pixel">
             在数字世界中培育你的真菌群落
           </p>
         </div>
@@ -81,12 +80,12 @@ function Welcome() {
               placeholder="你的名字"
               maxLength={20}
               disabled={isLoading}
-              className="w-full px-6 py-4 bg-slate-800/80 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all text-center text-lg backdrop-blur-sm"
+              className="w-full px-6 py-4 bg-black border-2 border-gray-800 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors text-center text-lg font-pixel"
             />
           </div>
 
           {error && (
-            <div className="text-center text-red-400 text-sm bg-red-500/10 py-2 rounded-lg">
+            <div className="text-center text-red-400 text-sm bg-red-500/10 py-2 border-2 border-red-500/30">
               {error}
             </div>
           )}
@@ -94,7 +93,7 @@ function Welcome() {
           <button
             type="submit"
             disabled={isLoading || !name.trim()}
-            className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-500/20"
+            className="w-full py-4 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed text-white font-semibold border-2 border-gray-600 hover:border-gray-500 disabled:border-gray-800 transition-colors"
           >
             {isLoading ? (
               <span className="flex items-center justify-center gap-2">
@@ -123,7 +122,7 @@ function Welcome() {
         </form>
 
         {/* 底部提示 */}
-        <p className="text-center text-slate-500 text-sm mt-8">
+        <p className="text-center text-gray-600 text-sm mt-8 font-pixel">
           输入名称创建你的数字身份
         </p>
       </div>

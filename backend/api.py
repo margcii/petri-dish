@@ -50,6 +50,85 @@ def generate_image_id(length: int = 8) -> str:
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
+# 杂交颜色混合规则表
+# 定义两个颜色混合后产生的颜色（基于前端 FUNGUS_COLORS 的 id）
+HYBRID_COLOR_RULES = {
+    # blue + yellow = green (青色+黄色=绿色)
+    ('blue', 'yellow'): 'green',
+    ('yellow', 'blue'): 'green',
+    # blue + red = purple (青色+红色=紫色)
+    ('blue', 'red'): 'purple',
+    ('red', 'blue'): 'purple',
+    # yellow + red = white (黄色+红色=暖色混合，用white表示)
+    ('yellow', 'red'): 'white',
+    ('red', 'yellow'): 'white',
+    # green + blue = blue (绿色偏青)
+    ('green', 'blue'): 'blue',
+    ('blue', 'green'): 'blue',
+    # green + yellow = yellow (绿色偏黄)
+    ('green', 'yellow'): 'yellow',
+    ('yellow', 'green'): 'yellow',
+    # green + red = yellow (绿色+红色=黄绿)
+    ('green', 'red'): 'yellow',
+    ('red', 'green'): 'yellow',
+    # purple + blue = blue (紫色偏青)
+    ('purple', 'blue'): 'blue',
+    ('blue', 'purple'): 'blue',
+    # purple + red = red (紫色偏红)
+    ('purple', 'red'): 'red',
+    ('red', 'purple'): 'red',
+    # purple + yellow = white (紫色+黄色=灰白)
+    ('purple', 'yellow'): 'white',
+    ('yellow', 'purple'): 'white',
+    # purple + green = blue (紫色+绿色=青色)
+    ('purple', 'green'): 'blue',
+    ('green', 'purple'): 'blue',
+    # white 混合保持原色（白色作为基底）
+    ('white', 'blue'): 'blue',
+    ('blue', 'white'): 'blue',
+    ('white', 'yellow'): 'yellow',
+    ('yellow', 'white'): 'yellow',
+    ('white', 'green'): 'green',
+    ('green', 'white'): 'green',
+    ('white', 'purple'): 'purple',
+    ('purple', 'white'): 'purple',
+    ('white', 'red'): 'red',
+    ('red', 'white'): 'red',
+}
+
+# 支持的颜色列表
+SUPPORTED_COLORS = ['blue', 'yellow', 'green', 'purple', 'white', 'red']
+
+
+def calculate_hybrid_color(parent1_image_id: str, parent2_image_id: str) -> str:
+    """根据父母真菌颜色计算杂交结果颜色
+
+    Args:
+        parent1_image_id: 父真菌1的颜色ID
+        parent2_image_id: 父真菌2的颜色ID
+
+    Returns:
+        杂交结果的颜色ID
+    """
+    # 查找混合规则
+    key = (parent1_image_id, parent2_image_id)
+    if key in HYBRID_COLOR_RULES:
+        return HYBRID_COLOR_RULES[key]
+
+    # 如果两个父母颜色相同，返回原颜色
+    if parent1_image_id == parent2_image_id and parent1_image_id in SUPPORTED_COLORS:
+        return parent1_image_id
+
+    # 如果其中一个颜色不在支持列表中，使用另一个颜色
+    if parent1_image_id in SUPPORTED_COLORS and parent2_image_id not in SUPPORTED_COLORS:
+        return parent1_image_id
+    if parent2_image_id in SUPPORTED_COLORS and parent1_image_id not in SUPPORTED_COLORS:
+        return parent2_image_id
+
+    # 默认：随机选择一个颜色
+    return random.choice(SUPPORTED_COLORS)
+
+
 # ==================== 用户接口 ====================
 
 @app.post("/register", response_model=UserResponse)
@@ -301,7 +380,10 @@ async def trigger_hybrid(request: TriggerHybridRequest):
     hybrid_content = ai_result if ai_result else f"{fungus1['content'][:50]} + {fungus2['content'][:50]}"
     print(f"[杂交] 最终内容: {hybrid_content[:100]}...")
 
-    image_id = generate_image_id()
+    # 根据父母真菌颜色计算杂交结果颜色
+    image_id = calculate_hybrid_color(fungus1["image_id"], fungus2["image_id"])
+    print(f"[杂交] 父母颜色: {fungus1['image_id']} + {fungus2['image_id']} -> 结果: {image_id}")
+
     dish_id = fungus1.get("dish_id") or fungus2.get("dish_id")
 
     hybrid_id = await db.create_hybrid_fungus(
@@ -357,9 +439,9 @@ async def debug_env():
     """调试环境变量"""
     import os
     return {
-        "SILICONFLOW_API_KEY": os.getenv("SILICONFLOW_API_KEY", "NOT SET")[:20] + "...",
-        "SILICONFLOW_BASE_URL": os.getenv("SILICONFLOW_BASE_URL", "NOT SET"),
-        "SILICONFLOW_MODEL": os.getenv("SILICONFLOW_MODEL", "NOT SET"),
+        "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "NOT SET")[:20] + "...",
+        "DEEPSEEK_BASE_URL": os.getenv("DEEPSEEK_BASE_URL", "NOT SET"),
+        "DEEPSEEK_MODEL": os.getenv("DEEPSEEK_MODEL", "NOT SET"),
         "cwd": os.getcwd()
     }
 

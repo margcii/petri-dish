@@ -48,7 +48,9 @@
       "Bash(python3 run.py)",
       "Bash(\"D:/software/programming/Anaconda3/python.exe\" run.py)",
       "Bash(npx kill-port:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)"
     ]
   },
   "language": "chinese"

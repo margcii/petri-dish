@@ -198,11 +198,15 @@ class Database:
         return fungus_id
     
     async def get_fungus(self, fungus_id: str) -> Optional[Dict[str, Any]]:
-        """获取真菌信息"""
+        """获取真菌信息（包含父母真菌的image_id）"""
         async with self._db.execute(
-            """SELECT fungus_id, dish_id, user_id, content, image_id, status,
-                      location, is_parent, unlock_time, parent1_id, parent2_id, created_at
-               FROM fungi WHERE fungus_id = ?""",
+            """SELECT f.fungus_id, f.dish_id, f.user_id, f.content, f.image_id, f.status,
+                      f.location, f.is_parent, f.unlock_time, f.parent1_id, f.parent2_id, f.created_at,
+                      p1.image_id as parent1_image_id, p2.image_id as parent2_image_id
+               FROM fungi f
+               LEFT JOIN fungi p1 ON f.parent1_id = p1.fungus_id
+               LEFT JOIN fungi p2 ON f.parent2_id = p2.fungus_id
+               WHERE f.fungus_id = ?""",
             (fungus_id,)
         ) as cursor:
             row = await cursor.fetchone()
@@ -219,17 +223,23 @@ class Database:
                     "unlock_time": row[8],
                     "parent1_id": row[9],
                     "parent2_id": row[10],
-                    "created_at": row[11]
+                    "created_at": row[11],
+                    "parent1_image_id": row[12],
+                    "parent2_image_id": row[13]
                 }
             return None
     
     async def get_dish_fungi(self, dish_id: str) -> List[Dict[str, Any]]:
-        """获取培养皿中的所有真菌"""
+        """获取培养皿中的所有真菌（包含父母真菌的image_id）"""
         fungi = []
         async with self._db.execute(
-            """SELECT fungus_id, dish_id, user_id, content, image_id, status,
-                      location, is_parent, unlock_time, parent1_id, parent2_id, created_at
-               FROM fungi WHERE dish_id = ?""",
+            """SELECT f.fungus_id, f.dish_id, f.user_id, f.content, f.image_id, f.status,
+                      f.location, f.is_parent, f.unlock_time, f.parent1_id, f.parent2_id, f.created_at,
+                      p1.image_id as parent1_image_id, p2.image_id as parent2_image_id
+               FROM fungi f
+               LEFT JOIN fungi p1 ON f.parent1_id = p1.fungus_id
+               LEFT JOIN fungi p2 ON f.parent2_id = p2.fungus_id
+               WHERE f.dish_id = ?""",
             (dish_id,)
         ) as cursor:
             async for row in cursor:
@@ -245,7 +255,9 @@ class Database:
                     "unlock_time": row[8],
                     "parent1_id": row[9],
                     "parent2_id": row[10],
-                    "created_at": row[11]
+                    "created_at": row[11],
+                    "parent1_image_id": row[12],
+                    "parent2_image_id": row[13]
                 })
         return fungi
 
