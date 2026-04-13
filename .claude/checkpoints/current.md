@@ -25,42 +25,40 @@
 
 ### CP4: 优化与部署 🔄 进行中
 
-#### CP4.1: UI修复 + 交互重构 ⏳ 当前
+#### CP4.1: UI修复 + 交互重构 ✅ 已完成
+**提交**: `26832bc`
 
-**目标**: 解决用户审查发现的所有UI问题，重构查看交互
-
-**验收标准**:
-- [ ] 4.1.1 蓝色文字对比度：`text-klein-700/800/900` 在黑色背景上不可见，提升到 `klein-300/400`
-- [ ] 4.1.2 培养皿快照：库页面卡片显示真实真菌缩略图（非占位 petridish.png）
-- [ ] 4.1.3 悬浮白色亮边：普通悬浮真菌/杂交组显示白色描边高亮
-- [ ] 4.1.4 去掉Ctrl交互：删除 `isCtrlPressed` 状态和 Ctrl 键监听，统一为普通模式
-- [ ] 4.1.5 杂交组点击弹窗重构：上方显示杂交结果文本，下方显示子真菌PNG，点击子PNG打开文本详情
-- [ ] 4.1.6 去掉缩放边框：Fabric 对象设置 `selectable: false`，移除缩放控制点
-- [ ] 4.1.7 空气背景全屏：确保 AirBackground `fixed inset-0` 生效，不受父容器裁切
-- [ ] 4.1.8 API切换：从 SiliconFlow 改为 DeepSeek 官方 API（key + base_url + model）
-
-**技术重点**:
-- PetriDishCanvas.tsx 重构交互逻辑（去掉Ctrl，改白色描边悬浮）
-- HybridGroupDetailModal.tsx 改为上方结果+下方子PNG布局
-- DishList.tsx 快照系统（轻量 DOM 渲染替代占位图）
-- fabric.js 对象交互性设置
-- AirBackground 全屏定位修复
+**已完成项**:
+- [x] 4.1.1 文字对比度：整体配色提亮（klein-300/400），按钮/面板颜色升级
+- [x] 4.1.2 培养皿快照：库页面卡片显示真实真菌缩略图（28px）
+- [x] 4.1.3 悬浮高亮：普通悬浮真菌白色描边高亮
+- [x] 4.1.4 去掉Ctrl交互：统一为普通悬浮模式
+- [x] 4.1.5 杂交组弹窗重构：上方杂交结果文本+下方子PNG布局
+- [x] 4.1.6 去掉缩放边框：Fabric 对象 `selectable: false`
+- [x] 4.1.7 空气背景全屏：AirBackground `fixed inset-0` 生效
+- [x] 4.1.8 API切换：DeepSeek 官方 API 已集成
+- [x] 修复：未杂交真菌点击直接显示文本+作者（非1x HYBRID）
+- [x] 修复：FungusDetailModal 显示用户名称（非UUID）
+- [x] UI：输入框从3行增至4行
+- [x] Playwright e2e：17/17 通过
 
 ---
 
-#### CP4.2: 动画效果 + LLM优化 ⏳ 待开始
+#### CP4.2: 动画效果 + LLM优化 🔄 开发完成，待人工检测
 
 **目标**: 增加真菌蠕动动画、发射动画，优化 AI 提示词
 
 **验收标准**:
-- [ ] 4.2.1 真菌异步蠕动：空闲真菌有缓慢的呼吸/漂移动画（scale + translate 缓动）
-- [ ] 4.2.2 发射到空气动画：真菌从输入区飞出到空气背景的过渡效果
-- [ ] 4.2.3 LLM提示词优化：调整 `hybrid_text()` prompt，输出更有诗意/创意风格
+- [x] 4.2.1 真菌异步蠕动：空闲真菌有缓慢的 X/Y 轴交替收放蠕动（RAF 统一循环）
+- [x] 4.2.2 发射到空气动画：真菌从预览区沿随机轨迹飞出屏幕的 CSS 动画
+- [x] 4.2.3 空气背景全屏修复：AirBackground 用 createPortal 渲染到 body，header/footer 改为 bg-black/70
+- [ ] 4.2.4 LLM提示词优化：调整 `hybrid_text()` prompt，输出更有诗意/创意风格（待开始）
 
-**技术重点**:
-- Fabric.js Canvas 动画（requestAnimationFrame 或 fabric.animate）
-- CSS transition/keyframes 飞出动画
-- ai_client.py prompt 调整
+**技术实现**:
+- PetriDishCanvas.tsx：FungusObjectData 扩展蠕动参数 + startWriggleLoop RAF 循环
+- Main.tsx：launchingFungus 状态 + 临时 fixed img 飞出动画
+- AirBackground.tsx：createPortal 修复 fixed 定位
+- index.css：@keyframes launch-fly
 
 ---
 

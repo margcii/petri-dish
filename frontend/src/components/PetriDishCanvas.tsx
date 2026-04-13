@@ -24,9 +24,16 @@ interface FungusObjectData {
   fungusData?: Fungus
   groupData?: HybridGroup
   fungusId?: string
+  // 蠕动参数
+  wrigglePhase?: number
+  wriggleSpeed?: number
+  wriggleAmpX?: number
+  wriggleAmpY?: number
+  baseScaleX?: number
+  baseScaleY?: number
 }
 
-const BASE_FUNGUS_SIZE = 60
+const BASE_FUNGUS_SIZE = 80
 
 export default function PetriDishCanvas({
   hybridGroups,
@@ -40,6 +47,7 @@ export default function PetriDishCanvas({
   const fabricRef = useRef<Canvas | null>(null)
   const groupsRef = useRef<HybridGroup[]>(hybridGroups)
   const animationRef = useRef<number[]>([])
+  const wriggleRafRef = useRef<number>(0)
   const dishBgRef = useRef<FabricImage | null>(null)
 
   // 保持 refs 同步
@@ -47,8 +55,12 @@ export default function PetriDishCanvas({
 
   // 清理所有动画
   const clearAnimations = useCallback(() => {
-    animationRef.current.forEach((id) => cancelAnimationFrame(id))
+    animationRef.current.forEach((id) => clearInterval(id))
     animationRef.current = []
+    if (wriggleRafRef.current) {
+      cancelAnimationFrame(wriggleRafRef.current)
+      wriggleRafRef.current = 0
+    }
   }, [])
 
   // 计算培养皿在 canvas 内的位置参数
@@ -60,6 +72,43 @@ export default function PetriDishCanvas({
       centerY: canvasHeight / 2,
       dishRadius,
     }
+  }, [])
+
+  // 蠕动参数随机生成
+  const randomWriggleParams = (): Pick<FungusObjectData, 'wrigglePhase' | 'wriggleSpeed' | 'wriggleAmpX' | 'wriggleAmpY'> => ({
+    wrigglePhase: Math.random() * Math.PI * 2,
+    wriggleSpeed: 0.0015 + Math.random() * 0.0015,
+    wriggleAmpX: 0.03 + Math.random() * 0.03,
+    wriggleAmpY: 0.03 + Math.random() * 0.03,
+  })
+
+  // 启动统一的蠕动 RAF 循环
+  const startWriggleLoop = useCallback((canvas: Canvas) => {
+    if (wriggleRafRef.current) {
+      cancelAnimationFrame(wriggleRafRef.current)
+    }
+
+    const loop = (t: number) => {
+      const objects = canvas.getObjects()
+      for (const obj of objects) {
+        const data = obj as unknown as FungusObjectData
+        if (!data.fungusId) continue
+        // 跳过孵化中的真菌（它们有脉冲动画）
+        if (data.groupData?.isIncubating) continue
+
+        const { wrigglePhase, wriggleSpeed, wriggleAmpX, wriggleAmpY, baseScaleX, baseScaleY } = data
+        if (wrigglePhase === undefined || wriggleSpeed === undefined || wriggleAmpX === undefined || wriggleAmpY === undefined) continue
+        if (baseScaleX === undefined || baseScaleY === undefined) continue
+
+        const scaleX = baseScaleX * (1 + Math.sin(t * wriggleSpeed + wrigglePhase) * wriggleAmpX)
+        const scaleY = baseScaleY * (1 + Math.cos(t * wriggleSpeed + wrigglePhase * 1.3) * wriggleAmpY)
+        obj.set({ scaleX, scaleY })
+      }
+      canvas.renderAll()
+      wriggleRafRef.current = requestAnimationFrame(loop)
+    }
+
+    wriggleRafRef.current = requestAnimationFrame(loop)
   }, [])
 
   // 渲染真菌到 canvas
@@ -106,6 +155,15 @@ export default function PetriDishCanvas({
           ;(visual as unknown as FungusObjectData).fungusData = fungus
           ;(visual as unknown as FungusObjectData).groupData = group
           ;(visual as unknown as FungusObjectData).fungusId = fungus.fungus_id
+
+          // 蠕动参数（非孵化真菌才设置）
+          if (!group.isIncubating) {
+            const wriggle = randomWriggleParams()
+            Object.assign(visual as unknown as FungusObjectData, wriggle, {
+              baseScaleX: scale,
+              baseScaleY: scale,
+            })
+          }
 
           canvas.add(visual)
 
@@ -161,6 +219,15 @@ export default function PetriDishCanvas({
           ;(hybridGroup as unknown as FungusObjectData).groupData = group
           ;(hybridGroup as unknown as FungusObjectData).fungusId = group.groupId
 
+          // 蠕动参数（非孵化组才设置）
+          if (!group.isIncubating) {
+            const wriggle = randomWriggleParams()
+            Object.assign(hybridGroup as unknown as FungusObjectData, wriggle, {
+              baseScaleX: scale,
+              baseScaleY: scale,
+            })
+          }
+
           canvas.add(hybridGroup)
 
           // 孵化脉冲
@@ -171,8 +238,11 @@ export default function PetriDishCanvas({
       }
 
       canvas.renderAll()
+
+      // 启动统一蠕动动画循环
+      startWriggleLoop(canvas)
     },
-    [getDishLayout, clearAnimations]
+    [getDishLayout, clearAnimations, startWriggleLoop]
   )
 
   // 孵化脉冲动画
@@ -288,7 +358,7 @@ export default function PetriDishCanvas({
           if (obj === target) {
             ;(obj as any).set({ opacity: originalOpacities.get(obj) ?? 1 })
           } else {
-            ;(obj as any).set({ opacity: 0.25 })
+            ;(obj as any).set({ opacity: 0.45 })
           }
         }
       }

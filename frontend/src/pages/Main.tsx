@@ -1,8 +1,8 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStoredUser, clearUser, type User } from '../api/user'
 import { getUserDishes, createDish, getDish, type Dish, type Fungus } from '../api/dish'
-import { uploadFungus, getAirFungi, triggerHybrid, checkHybridStatus, sendHeartbeat, checkNewHybrid, distributeAir, type CheckNewHybridResponse, type DistributeAirResponse } from '../api/fungus'
+import { uploadFungus, getAirFungi, triggerHybrid, checkHybridStatus, sendHeartbeat, checkNewHybrid, distributeAir, type CheckNewHybridResponse } from '../api/fungus'
 import { FUNGUS_COLORS, groupFungiByHybrid, type HybridGroup } from '../utils/fungusHelpers'
 import { getImageSrc } from '../utils/fungusImage'
 import AirBackground from '../components/AirBackground'
@@ -37,12 +37,14 @@ function Main() {
     const dropdownRef = useRef<HTMLDivElement>(null)
   const [lastHybridCheck, setLastHybridCheck] = useState<string | null>(null)
   const [hasNewHybrid, setHasNewHybrid] = useState(false)
-  const [isDistributing, setIsDistributing] = useState(false)
-  const [distributeMessage, setDistributeMessage] = useState<string | null>(null)
   const [isDishFullError, setIsDishFullError] = useState(false)
   const [fallingFungusId, setFallingFungusId] = useState<string | null>(null)
   const [_selectedDishIndex, setSelectedDishIndex] = useState<number | null>(null)
   const dishListRef = useRef<HTMLDivElement>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
+
+  // 发射动画状态
+  const [launchingFungus, setLaunchingFungus] = useState<{ imageId: string; key: number; startX: number; startY: number; angle: number } | null>(null)
 
   // 培养皿列表滚轮事件
   useEffect(() => {
@@ -130,6 +132,39 @@ function Main() {
     return () => clearInterval(interval)
   }, [activeDish?.dish_id, lastHybridCheck])
 
+  // 自动分配空气真菌
+  useEffect(() => {
+    if (!activeDish || !user || airFungi.length === 0) return
+    let intervalId: ReturnType<typeof setInterval> | null = null
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const autoDistribute = async () => {
+      try {
+        const result = await distributeAir(activeDish.dish_id, user.user_id)
+        if (result.data?.fungus_id) {
+          setFallingFungusId(result.data.fungus_id)
+          setTimeout(() => setFallingFungusId(null), 1000)
+        }
+        const fungi = await getAirFungi()
+        setAirFungi(fungi)
+        await fetchActiveDishFungi()
+      } catch {
+        // 静默：培养皿可能已满
+      }
+    }
+
+    // 3秒后首次执行，之后每15秒执行
+    timeoutId = setTimeout(() => {
+      autoDistribute()
+      intervalId = setInterval(autoDistribute, 15000)
+    }, 3000)
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [activeDish?.dish_id, user?.user_id, airFungi.length])
+
   // 加载空气真菌
   useEffect(() => {
     const fetchAirFungi = async () => {
@@ -141,8 +176,22 @@ function Main() {
   }, [])
 
   // 发射到空气
-  const handleLaunchToAir = async () => {
+  const handleLaunchToAir = useCallback(async () => {
     if (!text.trim() || !user) return
+
+    // 启动发射动画
+    if (previewRef.current) {
+      const rect = previewRef.current.getBoundingClientRect()
+      const angle = -60 + Math.random() * 120
+      setLaunchingFungus({
+        imageId: selectedColor.id,
+        key: Date.now(),
+        startX: rect.left + rect.width / 2,
+        startY: rect.top + rect.height / 2,
+        angle,
+      })
+    }
+
     setIsUploading(true)
     try {
       await uploadFungus({ user_id: user.user_id, content: text.trim(), image_id: selectedColor.id })
@@ -151,7 +200,7 @@ function Main() {
       setAirFungi(fungi)
     } catch (err) { console.error('发射到空气失败:', err) }
     finally { setIsUploading(false) }
-  }
+  }, [text, user, selectedColor.id])
 
   // 加载活跃培养皿真菌
   const fetchActiveDishFungi = async () => {
@@ -266,29 +315,6 @@ function Main() {
     } catch (err) { console.error('创建培养皿失败:', err) }
   }
 
-  // 从空气分配真菌
-  const handleDistributeAir = async () => {
-    if (!activeDish || !user) return
-    setIsDistributing(true)
-    setDistributeMessage(null)
-    try {
-      const result: DistributeAirResponse = await distributeAir(activeDish.dish_id, user.user_id)
-      setDistributeMessage(result.message)
-      if (result.data?.fungus_id) {
-        setFallingFungusId(result.data.fungus_id)
-        setTimeout(() => setFallingFungusId(null), 1000)
-      }
-      setTimeout(() => setDistributeMessage(null), 3000)
-      const fungi = await getAirFungi()
-      setAirFungi(fungi)
-      await fetchActiveDishFungi()
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || '分配失败'
-      setDistributeMessage(errorMsg)
-      setTimeout(() => setDistributeMessage(null), 3000)
-    } finally { setIsDistributing(false) }
-  }
-
   // 放入活跃培养皿
   const handleAddToActiveDish = async () => {
     if (!text.trim() || !user || !activeDish) return
@@ -341,14 +367,14 @@ function Main() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col relative">
-      {/* 空气背景层 */}
+    <div className="min-h-screen flex flex-col relative">
+      {/* 空气背景层 — Portal 到 body，fixed 全屏 */}
       <AirBackground airFungi={airFungi} />
 
       {/* 前景内容层 */}
       <div className="relative z-10 flex flex-col min-h-screen">
         {/* 顶部培养皿切换 */}
-        <header className="border-b-2 border-gray-900 bg-black/90 py-3">
+        <header className="border-b-2 border-gray-900 bg-black/70 py-3">
           <div className="max-w-6xl mx-auto px-4">
             <div className="flex items-center justify-between mb-3">
               <button
@@ -398,7 +424,7 @@ function Main() {
           <div className="max-w-2xl mx-auto">
             {/* 真菌预览区 */}
             <div className="flex justify-center mb-5">
-              <div className="relative">
+              <div className="relative" ref={previewRef}>
                 <div
                   className="w-20 h-20 border-2 border-gray-800 flex items-center justify-center overflow-hidden bg-black"
                 >
@@ -495,24 +521,6 @@ function Main() {
                     <div className="border-t border-gray-950" />
 
                     <div className="p-2">
-                      <button
-                        onClick={handleDistributeAir}
-                        disabled={isDistributing || !activeDish || airFungi.length === 0}
-                        className="w-full px-2 py-1.5 text-left text-gray-400 bg-gray-950/20 border border-gray-900 flex items-center gap-2 hover:bg-gray-950/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-[9px] font-pixel"
-                      >
-                        <span className="flex-1 truncate">INHALE AIR</span>
-                        {isDistributing && <span className="animate-pulse">...</span>}
-                      </button>
-                      {distributeMessage && (
-                        <p className={`text-[8px] mt-1 px-1 font-pixel ${distributeMessage.includes('已满') ? 'text-red-400' : 'text-gray-500'}`}>
-                          {distributeMessage}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="border-t border-gray-950" />
-
-                    <div className="p-2">
                       <p className="text-gray-600 text-[8px] px-1 mb-1.5 font-pixel">LIBRARY</p>
                       {dishes.length === 0 ? (
                         <p className="text-gray-500 text-[8px] px-1 py-1 font-pixel">EMPTY</p>
@@ -583,7 +591,7 @@ function Main() {
         </main>
 
         {/* 底部信息栏 */}
-        <footer className="border-t-2 border-gray-950 bg-black/90 py-2">
+        <footer className="border-t-2 border-gray-950 bg-black/70 py-2">
           <div className="max-w-6xl mx-auto px-4 flex items-center justify-between text-[8px] font-pixel">
             <span className="text-gray-600">
               {dishes.length} DISH{dishes.length !== 1 ? 'ES' : ''}
@@ -646,6 +654,28 @@ function Main() {
           <HybridGroupDetailModal group={selectedHybridGroup} onClose={() => setSelectedHybridGroup(null)} />
         )}
       </div>
+
+      {/* 发射动画：从预览区飞出屏幕 */}
+      {launchingFungus && (
+        <img
+          key={launchingFungus.key}
+          src={IMAGE_SRC_MAP[launchingFungus.imageId] || getImageSrc(launchingFungus.imageId)}
+          alt=""
+          className="fixed pointer-events-none"
+          style={{
+            left: launchingFungus.startX - 40,
+            top: launchingFungus.startY - 40,
+            width: 80,
+            height: 80,
+            zIndex: 9999,
+            objectFit: 'contain',
+            imageRendering: 'pixelated',
+            animation: `launch-fly 0.8s ease-out forwards`,
+            '--fly-angle': `${launchingFungus.angle}deg`,
+          } as React.CSSProperties}
+          onAnimationEnd={() => setLaunchingFungus(null)}
+        />
+      )}
     </div>
   )
 }

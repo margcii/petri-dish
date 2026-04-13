@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { createPortal } from 'react-dom'
 
 interface AirFungus {
   fungus_id: string
@@ -44,7 +45,7 @@ export default function AirBackground({ airFungi }: AirBackgroundProps) {
       size: randomBetween(20, 48),
       duration: randomBetween(8, 20),
       delay: randomBetween(0, 10),
-      opacity: randomBetween(0.15, 0.3),
+      opacity: randomBetween(0.3, 0.55),
       src: IMAGE_SRC_MAP[fungus.image_id] || '/layer4.png',
       title: fungus.content.slice(0, 50),
     }))
@@ -53,7 +54,7 @@ export default function AirBackground({ airFungi }: AirBackgroundProps) {
 
   if (displayedFungi.length === 0) return null
 
-  return (
+  const content = (
     <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
       {styles.map((style, i) => (
         <img
@@ -68,7 +69,7 @@ export default function AirBackground({ airFungi }: AirBackgroundProps) {
             width: style.size,
             height: style.size,
             opacity: style.opacity,
-            boxShadow: '0 0 6px rgba(64,64,64,0.25)',
+            boxShadow: '0 0 8px rgba(130,130,130,0.35)',
             animation: `drift ${style.duration}s ease-in-out ${style.delay}s infinite`,
             objectFit: 'contain',
             imageRendering: 'pixelated',
@@ -77,4 +78,6 @@ export default function AirBackground({ airFungi }: AirBackgroundProps) {
       ))}
     </div>
   )
+
+  return createPortal(content, document.body)
 }
