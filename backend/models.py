@@ -27,6 +27,7 @@ class UploadRequest(BaseModel):
     content: str
     dish_id: Optional[str] = None
     image_id: Optional[str] = None
+    dna_prompt: Optional[str] = None
 
 
 class BreatheRequest(BaseModel):
@@ -73,6 +74,8 @@ class FungusResponse(BaseModel):
     parent2_id: Optional[str] = None
     parent1_image_id: Optional[str] = None  # 父母真菌的颜色样式ID
     parent2_image_id: Optional[str] = None  # 父母真菌的颜色样式ID
+    dna_prompt: Optional[str] = None  # 真菌的DNA提示词
+    fall_remaining: Optional[int] = None  # 空气真菌剩余落入次数
     created_at: Optional[str] = None
 
 

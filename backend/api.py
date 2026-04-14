@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query
 from contextlib import asynccontextmanager
 import random
 import string
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -235,7 +236,8 @@ async def upload(request: UploadRequest):
         image_id=image_id,
         dish_id=request.dish_id,
         status=status,
-        location=location
+        location=location,
+        dna_prompt=request.dna_prompt
     )
 
     fungus = await db.get_fungus(fungus_id)
@@ -280,58 +282,68 @@ async def breathe(request: BreatheRequest):
 @app.post("/distribute_air", response_model=MessageResponse)
 async def distribute_air(
     dish_id: str = Query(..., description="目标培养皿ID"),
-    user_id: str = Query(..., description="用户ID（用于当目标培养皿满时，fallback到库中其他培养皿）")
+    user_id: str = Query(..., description="用户ID（用于过滤已落入的真菌）")
 ):
-    """分配空气真菌到培养皿（用于空气自动分配机制）
+    """分配空气真菌到培养皿（多寿命机制）
 
-    如果目标培养皿已满，会自动尝试用户库中的其他未满培养皿。
-    如果所有培养皿都满，则返回错误。
+    1. 获取所有空气真菌（fall_remaining > 0）
+    2. 过滤已落入当前用户的真菌
+    3. 过滤目标培养皿已满的（>=10个）
+    4. 随机选一个符合的空气真菌
+    5. 在目标培养皿创建新真菌副本
+    6. 记录分配关系
+    7. 原真菌 fall_remaining -= 1，若为0则删除
     """
     dish = await db.get_dish(dish_id)
     if not dish:
         raise HTTPException(status_code=404, detail="培养皿不存在")
 
-    air_fungi = await db.get_air_fungi()
-    if not air_fungi:
-        return MessageResponse(message="空气中没有真菌")
-
     # 检查目标培养皿是否已满
     fungus_count = await db.get_dish_fungus_count(dish_id)
-    target_dish_id = dish_id
-    target_dish_name = dish["name"]
-
     if fungus_count >= 10:
-        # 目标培养皿已满，尝试用户库中的其他未满培养皿
-        available_dish = await db.get_user_available_dish(user_id, exclude_dish_id=dish_id)
-        if not available_dish:
-            raise HTTPException(
-                status_code=400,
-                detail="所有培养皿已满（每个培养皿最多10个真菌）"
-            )
-        target_dish_id = available_dish["dish_id"]
-        target_dish_name = available_dish["name"]
+        raise HTTPException(status_code=400, detail="培养皿已满（最多10个真菌）")
 
-    # 随机选择一个真菌分配
-    fungus = random.choice(air_fungi)
+    # 获取所有空气真菌（fall_remaining > 0）
+    air_fungi = await db.get_air_fungi()
+    available_fungi = [f for f in air_fungi if (f.get("fall_remaining") or 0) > 0]
 
-    # 使用 move_fungus_to_dish 移动真菌
-    await db.move_fungus_to_dish(fungus["fungus_id"], target_dish_id)
+    if not available_fungi:
+        return MessageResponse(message="空气中没有可分配的真菌")
 
-    # 如果实际分配到了不同的培养皿，在消息中说明
-    if target_dish_id != dish_id:
-        return MessageResponse(
-            message=f"活跃培养皿已满，空气真菌已自动分配到培养皿「{target_dish_name}」",
-            data={
-                "fungus_id": fungus["fungus_id"],
-                "dish_id": target_dish_id,
-                "dish_name": target_dish_name,
-                "fallback": True
-            }
-        )
+    # 过滤已落入当前用户的
+    candidates = []
+    for f in available_fungi:
+        dist = await db.get_fungus_distributions(f["fungus_id"], user_id)
+        if not dist:
+            candidates.append(f)
 
+    if not candidates:
+        return MessageResponse(message="没有可供你接收的空气真菌")
+
+    # 随机选一个
+    fungus = random.choice(candidates)
+
+    # 在目标培养皿创建新真菌副本（新 fungus_id，复制 content/image_id/dna_prompt）
+    new_fungus_id = await db.create_fungus(
+        user_id=user_id,
+        content=fungus["content"],
+        image_id=fungus["image_id"],
+        dish_id=dish_id,
+        status="idle",
+        location="dish",
+        dna_prompt=fungus.get("dna_prompt")
+    )
+
+    # 记录分配关系
+    await db.add_fungus_distribution(fungus["fungus_id"], user_id, dish_id)
+
+    # 原真菌 fall_remaining -= 1，若为0则删除
+    await db.decrement_fall_remaining(fungus["fungus_id"])
+
+    new_fungus = await db.get_fungus(new_fungus_id)
     return MessageResponse(
-        message=f"空气真菌已分配到培养皿",
-        data={"fungus_id": fungus["fungus_id"], "dish_id": target_dish_id}
+        message="空气真菌已落入培养皿",
+        data={"fungus": dict(new_fungus)} if new_fungus else {}
     )
 
 
@@ -372,7 +384,9 @@ async def trigger_hybrid(request: TriggerHybridRequest):
     print(f"[杂交] 开始AI融合: fungus1={fungus1['fungus_id'][:8]}, fungus2={fungus2['fungus_id'][:8]}")
     ai_result = await ai_client.hybrid_text(
         fungus1["content"],
-        fungus2["content"]
+        fungus2["content"],
+        dna_prompt1=fungus1.get("dna_prompt"),
+        dna_prompt2=fungus2.get("dna_prompt")
     )
     print(f"[杂交] AI结果: {ai_result[:100] if ai_result else 'None'}...")
 

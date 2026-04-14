@@ -54,6 +54,12 @@ export default function FungusDetailModal({
           <p className="text-gray-300 text-[10px] font-pixel whitespace-pre-wrap leading-relaxed">
             {fungus.content}
           </p>
+          {fungus.dna_prompt && (
+            <div className="mt-2 flex items-center gap-1">
+              <span className="text-gray-600 text-[8px] font-pixel tracking-widest">DNA</span>
+              <span className="text-gray-500 text-[9px] font-pixel">{fungus.dna_prompt}</span>
+            </div>
+          )}
         </div>
 
         {/* 创建者ID */}

@@ -27,6 +27,7 @@ function Main() {
   const [activeDishIndex, setActiveDishIndex] = useState(0)
   const [_isLoadingFungi, setIsLoadingFungi] = useState(false)
   const [text, setText] = useState('')
+  const [dnaPrompt, setDnaPrompt] = useState('')
   const [selectedColor, setSelectedColor] = useState(FUNGUS_COLORS[0])
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -194,8 +195,9 @@ function Main() {
 
     setIsUploading(true)
     try {
-      await uploadFungus({ user_id: user.user_id, content: text.trim(), image_id: selectedColor.id })
+      await uploadFungus({ user_id: user.user_id, content: text.trim(), image_id: selectedColor.id, dna_prompt: dnaPrompt.trim() || undefined })
       setText('')
+      setDnaPrompt('')
       const fungi = await getAirFungi()
       setAirFungi(fungi)
     } catch (err) { console.error('发射到空气失败:', err) }
@@ -325,8 +327,9 @@ function Main() {
     }
     setIsUploading(true)
     try {
-      await uploadFungus({ user_id: user.user_id, content: text.trim(), dish_id: activeDish.dish_id, image_id: selectedColor.id })
+      await uploadFungus({ user_id: user.user_id, content: text.trim(), dish_id: activeDish.dish_id, image_id: selectedColor.id, dna_prompt: dnaPrompt.trim() || undefined })
       setText('')
+      setDnaPrompt('')
       await fetchActiveDishFungi()
       setIsDropdownOpen(false)
     } catch (err) { console.error('上传真菌失败:', err) }
@@ -347,8 +350,9 @@ function Main() {
         return
       }
       setIsUploading(true)
-      await uploadFungus({ user_id: user.user_id, content: text.trim(), dish_id: targetDish.dish_id, image_id: selectedColor.id })
+      await uploadFungus({ user_id: user.user_id, content: text.trim(), dish_id: targetDish.dish_id, image_id: selectedColor.id, dna_prompt: dnaPrompt.trim() || undefined })
       setText('')
+      setDnaPrompt('')
       await fetchActiveDishFungi()
       setIsDropdownOpen(false)
       setSelectedDishIndex(null)
@@ -466,6 +470,24 @@ function Main() {
                   FULL - 10/10
                 </div>
               )}
+            </div>
+
+            {/* DNA 提示词输入框 */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <label className="text-gray-600 text-[8px] font-pixel tracking-widest">DNA</label>
+              </div>
+              <input
+                type="text"
+                value={dnaPrompt}
+                onChange={(e) => setDnaPrompt(e.target.value)}
+                placeholder="输入提示词，定义你的真菌个性和行为倾向"
+                maxLength={100}
+                className="input-pixel w-full text-[9px]"
+              />
+              <div className="flex justify-end mt-0.5 text-[8px] text-gray-600 font-pixel">
+                <span>{dnaPrompt.length}/100</span>
+              </div>
             </div>
 
             {/* 分隔线 */}

@@ -14,6 +14,7 @@ export interface Fungus {
   parent2_id: string | null
   parent1_image_id?: string | null  // 父母真菌的颜色样式ID
   parent2_image_id?: string | null  // 父母真菌的颜色样式ID
+  dna_prompt?: string | null
   created_at: string
 }
 
@@ -22,6 +23,7 @@ export interface UploadFungusParams {
   content: string
   dish_id?: string
   image_id?: string
+  dna_prompt?: string  // 真菌DNA提示词
 }
 
 /**

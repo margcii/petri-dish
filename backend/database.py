@@ -178,30 +178,34 @@ class Database:
     # ==================== 真菌操作 ====================
     
     async def create_fungus(
-        self, 
-        user_id: str, 
-        content: str, 
+        self,
+        user_id: str,
+        content: str,
         image_id: str,
         dish_id: Optional[str] = None,
         status: str = "idle",
-        location: str = "air"
+        location: str = "air",
+        dna_prompt: Optional[str] = None
     ) -> str:
         """创建真菌，返回 fungus_id"""
         fungus_id = str(uuid.uuid4())
+        # fall_remaining: 在培养皿中为0，空气中为3
+        fall_remaining = 0 if dish_id else 3
         await self._db.execute(
-            """INSERT INTO fungi 
-               (fungus_id, dish_id, user_id, content, image_id, status, location) 
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (fungus_id, dish_id, user_id, content, image_id, status, location)
+            """INSERT INTO fungi
+               (fungus_id, dish_id, user_id, content, image_id, status, location, dna_prompt, fall_remaining)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (fungus_id, dish_id, user_id, content, image_id, status, location, dna_prompt, fall_remaining)
         )
         await self._db.commit()
         return fungus_id
     
     async def get_fungus(self, fungus_id: str) -> Optional[Dict[str, Any]]:
-        """获取真菌信息（包含父母真菌的image_id）"""
+        """获取真菌信息（包含父母真菌的image_id、dna_prompt、fall_remaining）"""
         async with self._db.execute(
             """SELECT f.fungus_id, f.dish_id, f.user_id, f.content, f.image_id, f.status,
                       f.location, f.is_parent, f.unlock_time, f.parent1_id, f.parent2_id, f.created_at,
+                      f.dna_prompt, f.fall_remaining,
                       p1.image_id as parent1_image_id, p2.image_id as parent2_image_id
                FROM fungi f
                LEFT JOIN fungi p1 ON f.parent1_id = p1.fungus_id
@@ -224,17 +228,20 @@ class Database:
                     "parent1_id": row[9],
                     "parent2_id": row[10],
                     "created_at": row[11],
-                    "parent1_image_id": row[12],
-                    "parent2_image_id": row[13]
+                    "dna_prompt": row[12],
+                    "fall_remaining": row[13],
+                    "parent1_image_id": row[14],
+                    "parent2_image_id": row[15]
                 }
             return None
     
     async def get_dish_fungi(self, dish_id: str) -> List[Dict[str, Any]]:
-        """获取培养皿中的所有真菌（包含父母真菌的image_id）"""
+        """获取培养皿中的所有真菌（包含父母真菌的image_id、dna_prompt、fall_remaining）"""
         fungi = []
         async with self._db.execute(
             """SELECT f.fungus_id, f.dish_id, f.user_id, f.content, f.image_id, f.status,
                       f.location, f.is_parent, f.unlock_time, f.parent1_id, f.parent2_id, f.created_at,
+                      f.dna_prompt, f.fall_remaining,
                       p1.image_id as parent1_image_id, p2.image_id as parent2_image_id
                FROM fungi f
                LEFT JOIN fungi p1 ON f.parent1_id = p1.fungus_id
@@ -256,8 +263,10 @@ class Database:
                     "parent1_id": row[9],
                     "parent2_id": row[10],
                     "created_at": row[11],
-                    "parent1_image_id": row[12],
-                    "parent2_image_id": row[13]
+                    "dna_prompt": row[12],
+                    "fall_remaining": row[13],
+                    "parent1_image_id": row[14],
+                    "parent2_image_id": row[15]
                 })
         return fungi
 
@@ -291,7 +300,8 @@ class Database:
         fungi = []
         async with self._db.execute(
             """SELECT fungus_id, dish_id, user_id, content, image_id, status,
-                      location, is_parent, unlock_time, parent1_id, parent2_id, created_at
+                      location, is_parent, unlock_time, parent1_id, parent2_id, created_at,
+                      dna_prompt, fall_remaining
                FROM fungi WHERE location = 'air'"""
         ) as cursor:
             async for row in cursor:
@@ -307,7 +317,9 @@ class Database:
                     "unlock_time": row[8],
                     "parent1_id": row[9],
                     "parent2_id": row[10],
-                    "created_at": row[11]
+                    "created_at": row[11],
+                    "dna_prompt": row[12],
+                    "fall_remaining": row[13]
                 })
         return fungi
     
@@ -405,6 +417,62 @@ class Database:
                     "status": row[8]
                 })
         return events
+
+    # ==================== 真菌分配操作 ====================
+
+    async def get_fungus_distributions(self, fungus_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        """检查某空气真菌是否已落入某用户"""
+        async with self._db.execute(
+            "SELECT id, fungus_id, user_id, dish_id, created_at FROM fungus_distributions WHERE fungus_id = ? AND user_id = ?",
+            (fungus_id, user_id)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {
+                    "id": row[0],
+                    "fungus_id": row[1],
+                    "user_id": row[2],
+                    "dish_id": row[3],
+                    "created_at": row[4]
+                }
+            return None
+
+    async def add_fungus_distribution(self, fungus_id: str, user_id: str, dish_id: str) -> str:
+        """记录空气真菌落入某用户培养皿"""
+        dist_id = str(uuid.uuid4())
+        await self._db.execute(
+            """INSERT INTO fungus_distributions (id, fungus_id, user_id, dish_id)
+               VALUES (?, ?, ?, ?)""",
+            (dist_id, fungus_id, user_id, dish_id)
+        )
+        await self._db.commit()
+        return dist_id
+
+    async def decrement_fall_remaining(self, fungus_id: str):
+        """将空气真菌的fall_remaining减1，如果变为0则删除该真菌及其分配记录"""
+        await self._db.execute(
+            "UPDATE fungi SET fall_remaining = fall_remaining - 1 WHERE fungus_id = ?",
+            (fungus_id,)
+        )
+        await self._db.commit()
+
+        # 检查是否变为0
+        async with self._db.execute(
+            "SELECT fall_remaining FROM fungi WHERE fungus_id = ?",
+            (fungus_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row and row[0] <= 0:
+                # 删除分配记录，再删除真菌
+                await self._db.execute(
+                    "DELETE FROM fungus_distributions WHERE fungus_id = ?",
+                    (fungus_id,)
+                )
+                await self._db.execute(
+                    "DELETE FROM fungi WHERE fungus_id = ?",
+                    (fungus_id,)
+                )
+                await self._db.commit()
 
 
 # 全局数据库实例
