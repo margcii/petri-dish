@@ -53,7 +53,13 @@
 - [x] 4.2.1 真菌异步蠕动：空闲真菌有缓慢的 X/Y 轴交替收放蠕动（RAF 统一循环）
 - [x] 4.2.2 发射到空气动画：真菌从预览区沿随机轨迹飞出屏幕的 CSS 动画
 - [x] 4.2.3 空气背景全屏修复：AirBackground 用 createPortal 渲染到 body，header/footer 改为 bg-black/70
-- [ ] 4.2.4 LLM提示词优化：调整 `hybrid_text()` prompt，输出更有诗意/创意风格（待开始）
+- [x] 4.2.4 LLM提示词优化：DNA提示词系统 + 空气真菌多寿命机制（提交 `a9c97cd`）
+  - 基础系统提示词定稿：拼贴诗人（碎片拆解+回声+极简连接词）
+  - DNA提示词UI：文本框下方DNA小输入框，100字上限
+  - 后端DNA综合机制：双方加权 / 单方单侧 / 无DNA纯基础
+  - 空气真菌3次落入寿命：fall_remaining + fungus_distributions表
+  - 同一空气真菌同一用户只落入1次，寿命归零自动删除
+  - 3轮实况模拟全部通过
 
 **技术实现**:
 - PetriDishCanvas.tsx：FungusObjectData 扩展蠕动参数 + startWriggleLoop RAF 循环
