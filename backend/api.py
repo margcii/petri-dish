@@ -28,6 +28,9 @@ from models import (
 import ai_client
 
 
+__version__ = "0.1.0"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -43,7 +46,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Petri Dish API",
     description="AI媒介艺术实验 - 真菌隐喻文本传播与杂交",
-    version="0.1.0",
+    version=__version__,
     lifespan=lifespan
 )
 
@@ -447,13 +450,12 @@ async def health():
 @app.get("/api/info")
 async def api_info():
     """诊断端点 - 暴露运行版本"""
-    return {"message": "Petri Dish API 正在运行", "version": "0.1.0"}
+    return {"message": "Petri Dish API 正在运行", "version": __version__}
 
 
 @app.get("/debug_env")
 async def debug_env():
     """调试环境变量"""
-    import os
     return {
         "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "NOT SET")[:20] + "...",
         "DEEPSEEK_BASE_URL": os.getenv("DEEPSEEK_BASE_URL", "NOT SET"),
