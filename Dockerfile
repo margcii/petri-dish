@@ -1,13 +1,11 @@
-# syntax=docker/dockerfile:1.6
-
 # ============ 阶段 1: 构建前端 ============
 FROM node:22-slim AS frontend-builder
 
 WORKDIR /build/frontend
 
 # 先复制 package.json 单独 npm install,利用 Docker 层缓存
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --no-audit --no-fund
+COPY frontend/package.json ./
+RUN npm install --no-audit --no-fund
 
 # 复制源码并构建(.env.production 决定 VITE_API_BASE=空)
 COPY frontend/ ./
@@ -19,10 +17,7 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# 系统依赖最小化,只装必要的
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# 系统依赖最小化 — python:3.11-slim 已包含运行所需的一切
 
 # Python 依赖
 COPY backend/requirements.txt /app/backend/requirements.txt

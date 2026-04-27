@@ -31,6 +31,9 @@ doc/
 *.md
 README.md.local
 
+# 本地测试脚本
+backend/test_*.py
+
 # 本地敏感配置
 .env
 backend/.env
