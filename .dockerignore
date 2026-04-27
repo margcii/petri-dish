@@ -1,0 +1,41 @@
+# 版本控制
+.git/
+.gitignore
+
+# 本地依赖与构建产物
+node_modules/
+frontend/node_modules/
+frontend/dist/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+
+# 本地数据库 — 容器内会用挂载卷
+backend/petri_dish.db
+backend/petri_dish.db.backup*
+backend/*.db
+petri_dish.db
+*.db
+
+# 测试与开发产物
+e2e/
+e2e-results/
+.playwright-mcp/
+test-*.png
+test-*.js
+.claude/worktrees/
+
+# 文档
+.claude/
+doc/
+*.md
+README.md.local
+
+# 本地敏感配置
+.env
+backend/.env
+frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
