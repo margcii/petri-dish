@@ -71,15 +71,20 @@
 
 #### CP4.3: 部署上线 ⏳ 待CP4.1+4.2完成后
 
-**目标**: 部署到线上，邀请内测
+**目标**: 部署到 HuggingFace Spaces Docker SDK 单服务,邀请内测
+
+**详细执行计划**:`.claude/plans/2026-04-27-hf-spaces-deploy.md`
 
 **验收标准**:
-- [ ] 后端部署到 Zeabur
-- [ ] 前端部署到 Vercel
-- [ ] 线上环境可正常访问和交互
+- [ ] 单服务镜像构建通过(后端 + 前端打包同一容器)
+- [ ] HF Space 部署成功并能从公网访问
+- [ ] DeepSeek API 杂交链路在容器内可用
+- [ ] SQLite 数据持久化生效(Storage Bucket 或本地挂卷)
 - [ ] 3 位内测用户体验无严重报错
 
 **技术重点**:
-- 环境变量配置（DeepSeek API Key）
-- SQLite 数据持久化
-- CORS 和代理配置
+- 多阶段 Dockerfile(node 构建前端 → python 运行后端)
+- `PETRI_DB_PATH` / `PETRI_FRONTEND_DIST` 环境变量
+- DeepSeek API Key 通过 HF Repository Secrets 注入
+- 端口约定 7860(HF 强制要求)
+- 单服务架构无需 CORS 配置

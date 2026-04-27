@@ -1,4 +1,14 @@
-# Petri Dish 架构文档
+# Petri Dish 架构文档（项目最初版本归档）
+
+> **归档说明**:本文档是项目立项与早期阶段的架构与计划快照,保留作为历史归档与最初设计意图的参考。
+>
+> 部分技术细节已演进:
+> - AI 服务:从 SiliconFlow 切换到 DeepSeek 官方 API
+> - 前端框架:React 18 → React 19、Tailwind v3 → v4、新增 Fabric.js v7
+> - 部署方案:Zeabur+Vercel 已弃用,改为 HuggingFace Spaces Docker SDK 单服务
+> - 数据模型:已新增 `dna_prompt`、`fall_remaining` 字段;接口已新增 DNA 提示词、空气多寿命等机制
+>
+> **现行架构请参考** `.claude/doc/architecture.md`,**部署计划见** `.claude/plans/2026-04-27-hf-spaces-deploy.md`。
 
 ## 项目概述
 
@@ -37,13 +47,13 @@ Petri Dish 是一个 AI 媒介艺术实验项目，使用"真菌隐喻"来探索
 | **服务商** | SiliconFlow (硅基流动) |
 | **Base URL** | `https://api.siliconflow.cn/v1` |
 | **模型** | `deepseek-ai/DeepSeek-V3.2` |
-| **API Key** | `sk-tuuvgnhjgqwaddqwlulezujscwokelwvtxpwlukkpqzfkacr` |
+| **API Key** | (已移除,见运行时环境变量) |
 | **文档** | https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions |
 
 ### 环境变量
 ```bash
-# backend/.env
-SILICONFLOW_API_KEY=sk-tuuvgnhjgqwaddqwlulezujscwokelwvtxpwlukkpqzfkacr
+# backend/.env(初版,使用 SiliconFlow,后期切到 DeepSeek 官方)
+SILICONFLOW_API_KEY=<your_key>
 SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
 SILICONFLOW_MODEL=deepseek-ai/DeepSeek-V3.2
 ```
@@ -59,7 +69,7 @@ from openai import AsyncOpenAI
 
 client = AsyncOpenAI(
     base_url="https://api.siliconflow.cn/v1",
-    api_key="sk-tuuvgnhjgqwaddqwlulezujscwokelwvtxpwlukkpqzfkacr"
+    api_key=os.getenv("SILICONFLOW_API_KEY")
 )
 
 response = await client.chat.completions.create(
@@ -274,20 +284,10 @@ petri-dish/
 
 ---
 
-## 部署
+## 部署(初版规划,已弃用)
 
-### 后端 (Zeabur)
-```bash
-# 环境变量
-SILICONFLOW_API_KEY=xxx
-DATABASE_URL=sqlite:///./petri_dish.db
-```
-
-### 前端 (Vercel)
-```bash
-# 构建命令
-npm run build
-
-# 输出目录
-dist
-```
+> 本节为项目初版部署规划(Zeabur 后端 + Vercel 前端),已不再采用。
+>
+> **现行部署方案**:HuggingFace Spaces Docker SDK 单服务,前后端打包同一容器,SQLite 通过 Storage Bucket 持久化。
+>
+> 详细计划与执行步骤见 `.claude/plans/2026-04-27-hf-spaces-deploy.md`。

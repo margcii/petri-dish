@@ -64,27 +64,13 @@
 
 ---
 
-### 5. 后端部署到 Zeabur ⭐ 高优先级
+### 5. 部署上线(已迁移到执行计划) ⭐ 高优先级
 
-**需求**：后端服务云端部署
+**当前方案**:HuggingFace Spaces Docker SDK 单服务,前后端打包同一容器。
 
-**步骤**：
-- [ ] 准备 Dockerfile
-- [ ] 配置环境变量
-- [ ] 数据库迁移方案（SQLite → PostgreSQL）
-- [ ] 部署并测试
+**详见**:`.claude/plans/2026-04-27-hf-spaces-deploy.md` 与 `.claude/checkpoints/current.md` 中的 CP4.3。
 
----
-
-### 6. 前端部署到 Vercel ⭐ 高优先级
-
-**需求**：前端静态资源部署
-
-**步骤**：
-- [ ] 配置 vercel.json
-- [ ] 设置 API 代理
-- [ ] 环境变量配置
-- [ ] 自动部署流水线
+> 初版规划(Zeabur 后端 + Vercel 前端)已弃用,主因:Zeabur 2026 年取消免费计算配额、Vercel 不支持 SQLite 持久化。
 
 ---
 

@@ -25,7 +25,7 @@ Petri Dish 是一个 AI 媒介艺术实验项目，使用"真菌隐喻"来探索
 - **框架**: FastAPI (Python)
 - **数据库**: SQLite + aiosqlite (异步)
 - **AI 服务**: DeepSeek 官方 API（`api.deepseek.com/v1`，模型 `deepseek-chat`）
-- **部署**: Zeabur (后端) + Vercel (前端)
+- **部署**: HuggingFace Spaces Docker SDK 单服务(详见 `.claude/plans/2026-04-27-hf-spaces-deploy.md`)
 
 ### 关键约束
 - Tailwind v4 不支持 `@apply` 引用自定义类，自定义样式用原生 CSS
