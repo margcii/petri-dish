@@ -16,8 +16,8 @@ BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 class Database:
     """异步数据库操作类"""
     
-    def __init__(self, db_path: str = "petri_dish.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: Optional[str] = None):
+        self.db_path = db_path or os.getenv("PETRI_DB_PATH", "petri_dish.db")
         self._db: Optional[aiosqlite.Connection] = None
     
     async def connect(self):
