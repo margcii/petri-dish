@@ -8,7 +8,9 @@ from pathlib import Path
 env_path = Path(__file__).parent / '.env'
 load_dotenv(env_path)
 
+import os
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import random
 import string
@@ -436,16 +438,16 @@ async def check_hybrid(fungus_id: str):
 
 # ==================== 健康检查 ====================
 
-@app.get("/")
-async def root():
-    """根路径"""
-    return {"message": "Petri Dish API 正在运行", "version": "0.1.0"}
-
-
 @app.get("/health")
 async def health():
     """健康检查"""
     return {"status": "healthy"}
+
+
+@app.get("/api/info")
+async def api_info():
+    """诊断端点 - 暴露运行版本"""
+    return {"message": "Petri Dish API 正在运行", "version": "0.1.0"}
 
 
 @app.get("/debug_env")
@@ -458,6 +460,19 @@ async def debug_env():
         "DEEPSEEK_MODEL": os.getenv("DEEPSEEK_MODEL", "NOT SET"),
         "cwd": os.getcwd()
     }
+
+
+# ==================== 静态前端 ====================
+# 注意:必须在所有 @app.xxx 路由声明之后,才不会"吃掉"具名 API 端点
+_frontend_dist = os.getenv(
+    "PETRI_FRONTEND_DIST",
+    str(Path(__file__).parent.parent / "frontend" / "dist")
+)
+if Path(_frontend_dist).exists():
+    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="static")
+    print(f"Static frontend mounted: {_frontend_dist}")
+else:
+    print(f"Warning: frontend dist not found at {_frontend_dist}, skipping mount")
 
 
 if __name__ == "__main__":
