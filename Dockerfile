@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.6
 
 # ============ 阶段 1: 构建前端 ============
-FROM node:20-slim AS frontend-builder
+FROM node:22-slim AS frontend-builder
 
 WORKDIR /build/frontend
 
