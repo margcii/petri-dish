@@ -440,19 +440,6 @@ async def check_hybrid(fungus_id: str):
     return FungusResponse(**fungus)
 
 
-# ==================== 临时清理 ====================
-
-@app.post("/admin/clear_air")
-async def clear_air():
-    """临时：删除所有空气真菌（测试数据清理）"""
-    try:
-        count = await db.clear_air()
-        return {"message": f"已删除 {count} 个空气真菌"}
-    except Exception as e:
-        import traceback
-        return {"error": str(e), "trace": traceback.format_exc()}
-
-
 # ==================== 健康检查 ====================
 
 @app.get("/health")
