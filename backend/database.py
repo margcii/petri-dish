@@ -393,15 +393,10 @@ class Database:
         return event_id
 
     async def clear_air(self) -> int:
-        """删除所有空气真菌，返回删除数量"""
-        # 先删除关联记录，避免外键约束失败
-        await self._db.execute(
-            "DELETE FROM hybrid_events WHERE fungus_id IN (SELECT fungus_id FROM fungi WHERE location = 'air')"
-        )
-        await self._db.execute(
-            "DELETE FROM fungus_distributions WHERE fungus_id IN (SELECT fungus_id FROM fungi WHERE location = 'air')"
-        )
+        """删除所有空气真菌，返回删除数量（临时关闭外键约束）"""
+        await self._db.execute("PRAGMA foreign_keys = OFF")
         cursor = await self._db.execute("DELETE FROM fungi WHERE location = 'air'")
+        await self._db.execute("PRAGMA foreign_keys = ON")
         await self._db.commit()
         return cursor.rowcount
 
