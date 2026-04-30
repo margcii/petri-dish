@@ -392,6 +392,12 @@ class Database:
         await self._db.commit()
         return event_id
 
+    async def clear_air(self) -> int:
+        """删除所有空气真菌，返回删除数量"""
+        cursor = await self._db.execute("DELETE FROM fungi WHERE location = 'air'")
+        await self._db.commit()
+        return cursor.rowcount
+
     async def check_new_hybrid(self, dish_id: str, since: str) -> List[Dict[str, Any]]:
         """检查某个培养皿在指定时间之后的新杂交事件"""
         events = []

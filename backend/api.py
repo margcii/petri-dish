@@ -445,9 +445,8 @@ async def check_hybrid(fungus_id: str):
 @app.post("/admin/clear_air")
 async def clear_air():
     """临时：删除所有空气真菌（测试数据清理）"""
-    await db._db.execute("DELETE FROM fungi WHERE location = 'air'")
-    await db._db.commit()
-    return {"message": "空气真菌已清空"}
+    count = await db.clear_air()
+    return {"message": f"已删除 {count} 个空气真菌"}
 
 
 # ==================== 健康检查 ====================
