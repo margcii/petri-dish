@@ -414,8 +414,9 @@ async def trigger_hybrid(request: TriggerHybridRequest):
         dish_id=dish_id
     )
 
-    # 添加杂交事件记录
-    await db.add_hybrid_event(dish_id if dish_id else "air", hybrid_id)
+    # 添加杂交事件记录（仅培养皿内杂交需要记录）
+    if dish_id:
+        await db.add_hybrid_event(dish_id, hybrid_id)
 
     hybrid = await db.get_fungus(hybrid_id)
     return FungusResponse(**hybrid)
