@@ -50,7 +50,12 @@
       "Bash(npx kill-port:*)",
       "Bash(sed:*)",
       "Bash(netstat:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "WebFetch(domain:margcii-petri-dish.hf.space)",
+      "mcp__mcp-chrome__chrome_get_web_content",
+      "Bash(D:/software/programming/node/npm.cmd run *)",
+      "Bash(grep -E \"\\\\.env$|deploy.*\\\\.md$\")",
+      "Bash(xargs -I {} git grep -l \"sk-494f301ab3544598b8964b7841991f20\" {})"
     ]
   },
   "language": "chinese"

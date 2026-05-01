@@ -545,7 +545,7 @@ docker run --rm -d \
   --name petri-test \
   -p 7860:7860 \
   -v "$(pwd)/test-data:/data" \
-  -e DEEPSEEK_API_KEY="sk-494f301ab3544598b8964b7841991f20" \
+  -e DEEPSEEK_API_KEY="<your-deepseek-api-key>" \
   -e DEEPSEEK_BASE_URL="https://api.deepseek.com" \
   -e DEEPSEEK_MODEL="deepseek-chat" \
   petri-dish:local
@@ -653,7 +653,7 @@ Expected: 跳转到 `https://huggingface.co/spaces/<username>/petri-dish`,看到
 
 | Name | Value |
 |------|-------|
-| `DEEPSEEK_API_KEY` | `sk-494f301ab3544598b8964b7841991f20` |
+| `DEEPSEEK_API_KEY` | `<your-deepseek-api-key>` |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | `deepseek-chat` |
 
